@@ -1,0 +1,23 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+
+.env
+.env.local
+.env.*.local
+
+src/generated/
+
+*.log
+npm-debug.log*
+
+.DS_Store
+Thumbs.db
+
+next-env.d.ts
+*.tsbuildinfo
+
+# Reference copies of the old Apps Script system. Not part of the app.
+_reference/

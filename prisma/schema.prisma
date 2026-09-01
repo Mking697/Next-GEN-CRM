@@ -1,0 +1,645 @@
+// Sales CRM - PostgreSQL (Neon) reached through the @prisma/adapter-pg driver adapter.
+//
+// engineType = "client" + the pg driver adapter means the generated client is
+// pure JS/Wasm: there is NO native Rust query-engine binary to ship or to match
+// to a platform. That is what makes this deployable to a plain Node 22 app slot.
+
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  runtime         = "nodejs"
+  moduleFormat    = "esm"
+  engineType      = "client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  OWNER
+  ADMIN
+  SALESMAN
+  CRE
+}
+
+enum LeadSource {
+  INDIAMART
+  META
+  MANUAL
+}
+
+enum LeadStatus {
+  NEW
+  FOLLOW_UP
+  ORDER_CONFIRMED
+  LOST
+}
+
+/// Where an order sits in the pipeline. Preserved verbatim when a user is
+/// deleted and their work is transferred to somebody else.
+enum OrderStage {
+  CONFIRMED
+  WITH_CRE
+  CLOSED
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  BANK_TRANSFER
+  CHEQUE
+  CARD
+  OTHER
+}
+
+/// A quotation moves DRAFT -> SENT -> ACCEPTED, and an accepted quotation is
+/// what an order is placed from. REJECTED and EXPIRED are terminal.
+enum QuotationStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+/// Whether a quotation has reached the Google Sheet and Drive yet. The
+/// database is the source of truth; Google is a mirror that is allowed to be
+/// briefly behind, and FAILED rows can be retried without losing anything.
+enum MirrorStatus {
+  PENDING
+  SYNCED
+  FAILED
+  DISABLED
+}
+
+enum ActivityKind {
+  NOTE
+  STATUS_CHANGE
+  GRAB
+  TRANSFER
+  ORDER_CONFIRMED
+  HANDOVER
+  PAYMENT
+  CLOSED
+}
+
+// ---------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String
+  name         String
+  phone        String?
+  role         Role
+  isActive     Boolean @default(true)
+
+  /// How this person is spelled in column A of the Clientdata sheet, when it
+  /// differs from their CRM name. "SUDHIR KUMAR NAGAR" in the sheet is
+  /// "Sudhir nagar" here, and only an explicit alias can bridge that safely.
+  sheetAlias String?
+
+  /// The salesmen this CRE works for. Empty for every other role.
+  ///
+  /// Many-to-many, because one CRE can serve more than one salesman. Which of
+  /// them a CRE is acting for at any moment is a per-session choice, not a
+  /// property of the account - see lib/session.ts.
+  salesmen CreSalesman[] @relation("CreSalesmanCre")
+
+  /// The CREs assigned to this salesman.
+  cres CreSalesman[] @relation("CreSalesmanSalesman")
+
+  /// DEPRECATED, and read by nothing. Superseded by CreSalesman above, which
+  /// can hold more than one salesman.
+  ///
+  /// Deliberately still here so the release that introduces CreSalesman is an
+  /// expand-only migration: the previous version of the app is still running
+  /// while the new one builds, and it reads this column on every request. It
+  /// gets dropped in the release after, once nothing old is left running.
+  ///
+  /// The contract migration, when that happens:
+  ///
+  ///   ALTER TABLE "User" DROP CONSTRAINT "User_managerId_fkey";
+  ///   DROP INDEX "User_managerId_idx";
+  ///   ALTER TABLE "User" DROP COLUMN "managerId";
+  ///
+  /// ...and delete these three fields plus the @@index below.
+  managerId  String?
+  manager    User?   @relation("LegacyManager", fields: [managerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  legacyCres User[]  @relation("LegacyManager")
+
+  createdById  String?
+  createdBy    User?  @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  createdUsers User[] @relation("UserCreatedBy")
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLoginAt DateTime?
+
+  sessions         Session[]
+  ownedLeads       Lead[]         @relation("LeadOwner")
+  creLeads         Lead[]         @relation("LeadCre")
+  salesOrders      Order[]        @relation("OrderSalesman")
+  creOrders        Order[]        @relation("OrderCre")
+  recordedPayments Payment[]      @relation("PaymentRecordedBy")
+  activities       LeadActivity[] @relation("ActivityActor")
+  auditEvents      AuditEvent[]   @relation("AuditActor")
+  quotations       Quotation[]         @relation("QuotationCre")
+  salesQuotations  Quotation[]         @relation("QuotationSalesman")
+  revisions        QuotationRevision[] @relation("RevisionActor")
+  clientCompanies  Company[]      @relation("CompanySalesman")
+
+  @@index([role])
+  @@index([sheetAlias])
+  /// Goes with the deprecated managerId above; dropped in the same release.
+  @@index([managerId])
+}
+
+/// Which salesmen a CRE works for.
+///
+/// Replaces the old `User.managerId`, which could only hold one. A CRE with
+/// two or more rows here picks the one they are acting for from the sidebar,
+/// and that choice decides which leads they see and which salesman a new
+/// quotation is credited to.
+model CreSalesman {
+  id String @id @default(cuid())
+
+  creId String
+  cre   User   @relation("CreSalesmanCre", fields: [creId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Restrict, because a salesman holding CREs must never vanish silently:
+  /// deleteUser() re-points them inside the transaction first.
+  salesmanId String
+  salesman   User   @relation("CreSalesmanSalesman", fields: [salesmanId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([creId, salesmanId])
+  @@index([creId])
+  @@index([salesmanId])
+}
+
+model Session {
+  id String @id @default(cuid())
+
+  /// sha256 of the opaque cookie token. The raw token is never stored.
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userAgent String?
+  ip        String?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Leads
+// ---------------------------------------------------------------------------
+
+model Lead {
+  id     String     @id @default(cuid())
+  source LeadSource
+  status LeadStatus @default(NEW)
+
+  /// A lead can arrive with nothing but a name and a phone number, so
+  /// everything except personName is optional.
+  personName  String
+  phone       String?
+  email       String?
+  companyName String?
+  city        String?
+  state       String?
+  product     String?
+  message     String?
+
+  /// Normalised dedupe keys: digits-only phone, lowercased email.
+  /// Unique and NULL-tolerant. Postgres treats each NULL as distinct, so
+  /// leads with no phone or no email never collide with each other.
+  phoneKey String? @unique
+  emailKey String? @unique
+
+  /// Provider-side id (IndiaMART QUERY_ID, Meta leadgen_id) for idempotent ingest.
+  externalId String?
+
+  /// Null owner == sitting in the pool, grabbable by any salesman.
+  /// SetNull rather than Cascade: deleting a user must never delete a lead.
+  ownerId   String?
+  owner     User?     @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  grabbedAt DateTime?
+
+  /// The CRE the salesman handed this lead to, who quotes it and places the
+  /// order. Separate from ownerId on purpose: the salesman stays the owner, so
+  /// the Overview keeps crediting their grabs and the delete-and-transfer
+  /// rules keep working unchanged.
+  creId        String?
+  cre          User?     @relation("LeadCre", fields: [creId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  handedToCreAt DateTime?
+
+  nextFollowUpAt DateTime?
+  lostReason     String?
+
+  /// When the lead arrived at the source, not when we stored it.
+  receivedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  order      Order?
+  activities LeadActivity[]
+  quotations Quotation[]
+
+  @@unique([source, externalId])
+  @@index([creId])
+  @@index([ownerId])
+  @@index([status])
+  @@index([source])
+  @@index([receivedAt])
+  @@index([ownerId, receivedAt])
+}
+
+model LeadActivity {
+  id     String @id @default(cuid())
+  leadId String
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  kind    ActivityKind
+  message String
+
+  actorId String?
+  actor   User?   @relation("ActivityActor", fields: [actorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([leadId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Customers
+// ---------------------------------------------------------------------------
+
+model Company {
+  id    String  @id @default(cuid())
+  name  String
+  city  String?
+  state String?
+  gstin String?
+
+  /// The salesman this client belongs to. A CRE only quotes the clients of
+  /// the salesman they report to; admins and the owner see all of them.
+  /// Null means unassigned, which is what an unmatched import leaves behind.
+  salesmanId String?
+  salesman   User?   @relation("CompanySalesman", fields: [salesmanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Exactly what column A of the Clientdata sheet said, kept verbatim so an
+  /// unmatched import can be diagnosed rather than guessed at.
+  sheetSalesExecutive String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contacts   Contact[]
+  orders     Order[]
+  quotations Quotation[]
+
+  @@index([name])
+  @@index([salesmanId])
+}
+
+model Contact {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name        String
+  phone       String?
+  email       String?
+  designation String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders     Order[]
+  quotations Quotation[]
+
+  @@index([companyId])
+}
+
+// ---------------------------------------------------------------------------
+// Orders and money
+// ---------------------------------------------------------------------------
+
+model Order {
+  id String @id @default(cuid())
+
+  /// Human-readable running number, e.g. ORD-2026-0007.
+  orderNo String @unique
+
+  leadId String? @unique
+  lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// The accepted quotation this order was placed from. Null only for orders
+  /// an admin raised directly without quoting.
+  quotationId String?    @unique
+  quotation   Quotation? @relation(fields: [quotationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Never null: an order always belongs to a salesman. On delete the
+  /// transaction re-points it before the user row goes.
+  salesmanId String
+  salesman   User   @relation("OrderSalesman", fields: [salesmanId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  creId        String?
+  cre          User?     @relation("OrderCre", fields: [creId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  handedOverAt DateTime?
+
+  /// INR in integer paise. BigInt, so a crore-plus order cannot overflow.
+  amountPaise BigInt
+
+  stage OrderStage @default(CONFIRMED)
+  title String?
+  notes String?
+
+  confirmedAt DateTime  @default(now())
+  closedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  payments Payment[]
+
+  @@index([salesmanId])
+  @@index([creId])
+  @@index([stage])
+  @@index([confirmedAt])
+}
+
+model Payment {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// INR in integer paise. Always positive.
+  amountPaise BigInt
+  mode        PaymentMode @default(BANK_TRANSFER)
+  reference   String?
+  note        String?
+
+  receivedAt DateTime @default(now())
+
+  recordedById String?
+  recordedBy   User?   @relation("PaymentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([receivedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Quotations
+// ---------------------------------------------------------------------------
+
+/// What the customer is sent before an order exists.
+///
+/// A CRE builds one of these on a spreadsheet-style grid, every line typed by
+/// hand. Accepting it is what creates the Order, and the payable amount on the
+/// quotation becomes the order value.
+///
+/// Party details are SNAPSHOT here rather than only referenced. A quotation is
+/// a document that was sent on a date; if the customer later changes their
+/// address or GST number, the quotation that went out must not silently
+/// change with it.
+model Quotation {
+  id String @id @default(cuid())
+
+  /// Human-readable running number, e.g. REF-020. Continues the series the
+  /// old Apps Script system was using.
+  quoteNo String          @unique
+  status  QuotationStatus @default(DRAFT)
+
+  /// Null for a walk-in quoted without a lead behind it.
+  leadId String?
+  lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// The CRE who built it. Restrict, so deleteUser() has to re-point it first.
+  ///
+  /// Kept for the audit trail and for scoping, but deliberately NOT printed on
+  /// the document: the customer sees the salesman who owns the relationship.
+  creId String
+  cre   User   @relation("QuotationCre", fields: [creId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// The salesman this quotation is raised for, and whose name, phone and
+  /// email appear on the PDF.
+  ///
+  /// Written once when the quotation is created: the lead owner if there is a
+  /// lead, otherwise the salesman the CRE was acting for. It has to be stored
+  /// rather than derived, because a CRE serving two salesmen gives no single
+  /// answer to "whose is this?", and because the order placed from it takes
+  /// its salesman from here.
+  salesmanId String?
+  salesman   User?   @relation("QuotationSalesman", fields: [salesmanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  // -- party snapshot ------------------------------------------------------
+  partyName      String
+  contactPerson  String?
+  customerMobile String?
+  customerEmail  String?
+  customerGst    String?
+
+  billingStreet   String?
+  billingCity     String?
+  billingState    String?
+  billingPincode  String?
+  billingCountry  String? @default("India")
+
+  shippingPartyName     String?
+  shippingContactPerson String?
+  shippingStreet        String?
+  shippingCity          String?
+  shippingState         String?
+  shippingPincode       String?
+  shippingCountry       String? @default("India")
+
+  // -- document text (editable, seeded from a template) --------------------
+  subject String?
+  note    String?
+  terms   String?
+
+  // -- money, all INR in integer paise -------------------------------------
+  /// Sum of the line items. Recomputed from items on every write.
+  subTotalPaise BigInt @default(0)
+  freightPaise  BigInt @default(0)
+  /// Whole percent, 18 by default.
+  gstPercent    Int    @default(18)
+  gstPaise      BigInt @default(0)
+  /// subTotal + freight + gst. This is what the order is placed for.
+  payablePaise  BigInt @default(0)
+
+  /// Highest revision number issued so far. 1 means never reworked.
+  revisionCount Int @default(0)
+
+  validUntil DateTime?
+  sentAt     DateTime?
+  acceptedAt DateTime?
+
+  // -- the Google mirror ---------------------------------------------------
+  /// Drive file URL of the generated PDF, once it has been uploaded.
+  pdfUrl       String?
+  sheetStatus  MirrorStatus @default(PENDING)
+  sheetRow     Int?
+  sheetSyncedAt DateTime?
+  sheetError   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items     QuotationItem[]
+  revisions QuotationRevision[]
+  order     Order?
+
+  @@index([creId])
+  @@index([salesmanId])
+  @@index([leadId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([sheetStatus])
+}
+
+/// One saved state of a quotation, kept so a rework can be traced.
+///
+/// A quotation is a document that gets negotiated: the rate moves, a line is
+/// added, freight appears. "What did we send them last time and what changed
+/// since?" is a question people actually need answered, and reconstructing it
+/// from an audit log of individual field writes is guesswork. So each save
+/// stores the whole document plus a written summary of what moved.
+model QuotationRevision {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  /// 1 for the first save, then 2, 3, ... Revision 1 is the original; anything
+  /// above that is a rework.
+  revision Int
+
+  actorId String?
+  actor   User?   @relation("RevisionActor", fields: [actorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// The full document as it stood, so any two revisions can be compared
+  /// later even for fields nobody thought to diff at the time.
+  snapshot Json
+
+  /// What changed against the previous revision, in plain sentences. Empty on
+  /// revision 1, which had nothing to change against.
+  summary String
+
+  itemCount     Int
+  subTotalPaise BigInt
+  payablePaise  BigInt
+
+  createdAt DateTime @default(now())
+
+  @@unique([quotationId, revision])
+  @@index([quotationId, createdAt])
+}
+
+/// One row of the quotation grid. Every column is free text the CRE types,
+/// which is the whole point: the old panel-picker modals are gone.
+model QuotationItem {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  /// 1-based row order in the grid.
+  position Int
+
+  particular     String?
+  panelThickness String?
+  density        String?
+  specs          String?
+  sheetThickness String?
+  description    String?
+  uom            String?
+
+  /// The expression the quantity was worked out from, e.g. "2+2*8", exactly
+  /// as it was typed into the calculator.
+  ///
+  /// qtyMilli is the answer; this is the working. Keeping only the answer
+  /// meant that three days later "18 SQM" gave no hint of whether that was
+  /// two panels plus two rows of eight or something else, and correcting it
+  /// meant redoing the sum from scratch. Null when the quantity was typed as
+  /// a plain number, because "18" is not working worth keeping.
+  ///
+  /// Internal: the customer sees the quantity, never this.
+  qtyFormula  String?
+
+  /// Quantity in thousandths, so 123.45 SQM is stored as 123450. Integer
+  /// arithmetic only, exactly like the money columns: amountPaise is
+  /// qtyMilli * ratePaise / 1000, rounded once.
+  qtyMilli    Int    @default(0)
+  ratePaise   BigInt @default(0)
+  amountPaise BigInt @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([quotationId, position])
+  @@index([quotationId])
+}
+
+// ---------------------------------------------------------------------------
+// Operational tables
+// ---------------------------------------------------------------------------
+
+/// One row per background job, e.g. "indiamart". Holds the last-run timestamp
+/// that enforces the hard 5-minute rate limit, plus an in-flight lock so two
+/// overlapping cron hits cannot both call the provider.
+model SyncState {
+  key           String    @id
+  lastRunAt     DateTime?
+  lastSuccessAt DateTime?
+  lockedAt      DateTime?
+  lastStatus    String?
+  lastError     String?
+  fetched       Int       @default(0)
+  created       Int       @default(0)
+  duplicates    Int       @default(0)
+  updatedAt     DateTime  @updatedAt
+}
+
+/// Append-only trail. User deletions and work transfers write here, so there
+/// is always a record of where a deleted user's leads and orders went.
+model AuditEvent {
+  id     String @id @default(cuid())
+  action String
+  detail String
+
+  actorId String?
+  actor   User?   @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  targetType String?
+  targetId   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([targetType, targetId])
+}

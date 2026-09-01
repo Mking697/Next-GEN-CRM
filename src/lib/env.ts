@@ -1,0 +1,204 @@
+import "server-only";
+import { z } from "zod";
+
+/**
+ * Every setting in this app comes from an environment variable. Nothing here
+ * has a hardcoded URL, key or secret.
+ *
+ * Parsing is lazy and memoised on purpose. `next build` imports every module
+ * but renders nothing that touches the database (every page reads cookies, so
+ * every page is dynamic), which means a build machine does not need production
+ * secrets. The first real request is what forces validation, and a missing
+ * variable fails loudly there with the variable named.
+ */
+
+const schema = z.object({
+  NODE_ENV: z
+    .enum(["development", "test", "production"])
+    .default("development"),
+  PORT: z.coerce.number().int().positive().default(3000),
+
+  APP_URL: z
+    .string()
+    .url("APP_URL must be an absolute URL, e.g. https://crm.example.com")
+    .transform((v) => v.replace(/\/+$/, "")),
+  APP_TIMEZONE: z.string().min(1).default("Asia/Kolkata"),
+
+  DATABASE_URL: z.string().min(1, "DATABASE_URL (pooled Neon URL) is required"),
+  DIRECT_DATABASE_URL: z
+    .string()
+    .min(1, "DIRECT_DATABASE_URL (unpooled Neon URL) is required"),
+  /*
+   * Sized for the concurrency, not for the size of the database.
+   *
+   * The Overview costs about seventeen round-trips, so ten people opening it
+   * at once is a hundred and seventy queries. At a pool of 10 that is
+   * seventeen waves of network latency; at 25 it is seven. Measured against
+   * the real data, ten concurrent Overview loads went from 1417ms to 1032ms
+   * and twenty from 2596ms to 1534ms.
+   *
+   * The app talks to Neon through its pooler, which handles thousands of
+   * client connections, so 25 from one Node process costs nothing there.
+   */
+  DATABASE_POOL_MAX: z.coerce.number().int().positive().max(100).default(25),
+  DATABASE_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+
+  AUTH_SECRET: z
+    .string()
+    .min(32, "AUTH_SECRET must be at least 32 characters"),
+  SESSION_COOKIE_NAME: z.string().min(1).default("crm_session"),
+  SESSION_TTL_HOURS: z.coerce.number().int().positive().default(168),
+  LOGIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(8),
+  LOGIN_WINDOW_MINUTES: z.coerce.number().int().positive().default(15),
+
+  CRON_SECRET: z.string().default(""),
+
+  INDIAMART_CRM_KEY: z.string().default(""),
+  INDIAMART_API_URL: z
+    .string()
+    .url()
+    .default("https://mapi.indiamart.com/wservce/crm/crmListing/v2/"),
+  INDIAMART_MIN_INTERVAL_MINUTES: z.coerce.number().int().min(5).default(5),
+  INDIAMART_LOOKBACK_MINUTES: z.coerce.number().int().positive().default(30),
+  INDIAMART_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
+
+  META_APP_SECRET: z.string().default(""),
+  META_VERIFY_TOKEN: z.string().default(""),
+  META_PAGE_ACCESS_TOKEN: z.string().default(""),
+  GOOGLE_SERVICE_ACCOUNT_EMAIL: z.string().default(""),
+  GOOGLE_PRIVATE_KEY: z.string().default(""),
+  GOOGLE_SHEET_ID: z.string().default(""),
+  GOOGLE_DRIVE_FOLDER_ID: z.string().default(""),
+  GOOGLE_SHEET_CLIENTS_TAB: z.string().default("Clientdata"),
+  GOOGLE_SHEET_QUOTATIONS_TAB: z.string().default("SALES CRM"),
+  GOOGLE_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
+
+  QUOTATION_NUMBER_START: z.coerce.number().int().positive().default(20),
+
+  META_GRAPH_VERSION: z.string().default("v21.0"),
+  META_GRAPH_URL: z.string().url().default("https://graph.facebook.com"),
+  META_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+}).superRefine((value, ctx) => {
+  // The session cookie takes its Secure flag from APP_URL, because that is
+  // the only thing that knows whether the public origin is TLS - the app
+  // itself sits behind a proxy and only ever sees plain http. A wrong value
+  // here would silently ship every session cookie without Secure, so a
+  // non-local origin has to be https or the app refuses to start.
+  //
+  // Keyed on the host rather than on NODE_ENV deliberately. A hosting panel
+  // that never sets NODE_ENV leaves it defaulting to "development", which
+  // would switch this check off in exactly the deployment it exists for.
+  if (!value.APP_URL.startsWith("https://") && !isLocalOrigin(value.APP_URL)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["APP_URL"],
+      message:
+        `APP_URL is ${value.APP_URL}, which is not https and not a local address. ` +
+        "The session cookie takes its Secure flag from this value, so starting " +
+        "like this would send every session cookie in the clear. Set the public " +
+        "https origin, e.g. https://crm.example.com.",
+    });
+  }
+});
+
+/**
+ * Where plain http is a normal thing to be running on: the dev machine, and
+ * a private LAN address while testing on a phone.
+ */
+function isLocalOrigin(url: string): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return false;
+  }
+  if (host === "localhost" || host.endsWith(".localhost")) return true;
+  if (host === "127.0.0.1" || host === "::1" || host === "[::1]") return true;
+  // RFC1918.
+  if (/^10\./.test(host)) return true;
+  if (/^192\.168\./.test(host)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
+  return false;
+}
+
+export type Env = z.infer<typeof schema>;
+
+let cached: Env | null = null;
+
+function parseEnv(): Env {
+  // Strip empty strings so zod defaults apply to blank panel fields.
+  const raw: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value === "string" && value.length > 0) raw[key] = value;
+  }
+
+  const result = schema.safeParse(raw);
+  if (!result.success) {
+    const lines = result.error.issues.map(
+      (issue) => `  - ${issue.path.join(".") || "(root)"}: ${issue.message}`,
+    );
+    throw new Error(
+      [
+        "Invalid environment configuration.",
+        ...lines,
+        "",
+        "See .env.example for what each variable means.",
+      ].join("\n"),
+    );
+  }
+  return result.data;
+}
+
+/**
+ * Lazily validated environment. Access a property to force validation.
+ */
+export const env: Env = new Proxy({} as Env, {
+  get(_target, prop: string) {
+    cached ??= parseEnv();
+    return cached[prop as keyof Env];
+  },
+  has(_target, prop: string) {
+    cached ??= parseEnv();
+    return prop in cached;
+  },
+  ownKeys() {
+    cached ??= parseEnv();
+    return Reflect.ownKeys(cached);
+  },
+  getOwnPropertyDescriptor() {
+    return { enumerable: true, configurable: true };
+  },
+});
+
+/** Throws with a readable report if anything is missing. Used by /api/health. */
+export function assertEnv(): Env {
+  cached ??= parseEnv();
+  return cached;
+}
+
+export const isProduction = () => env.NODE_ENV === "production";
+
+/** IndiaMART polling is off unless a CRM key is configured. */
+export const isIndiamartEnabled = () => env.INDIAMART_CRM_KEY.length > 0;
+
+/** Meta Lead Ads is off unless an app secret is configured. */
+export const isMetaEnabled = () => env.META_APP_SECRET.length > 0;
+
+/** Cron routes refuse every request unless a secret is configured. */
+export const isCronEnabled = () => env.CRON_SECRET.length > 0;
+
+export const metaWebhookUrl = () => `${env.APP_URL}/api/webhooks/meta`;
+
+/**
+ * The Google mirror is off until a service account, a sheet and a Drive folder
+ * are all configured. Half-configured is treated as off rather than as an
+ * error, exactly like the other integrations.
+ */
+export const isGoogleEnabled = () =>
+  env.GOOGLE_SERVICE_ACCOUNT_EMAIL.length > 0 &&
+  env.GOOGLE_PRIVATE_KEY.length > 0 &&
+  env.GOOGLE_SHEET_ID.length > 0;
+
+/** Drive upload additionally needs a folder to put the file in. */
+export const isDriveEnabled = () =>
+  isGoogleEnabled() && env.GOOGLE_DRIVE_FOLDER_ID.length > 0;
