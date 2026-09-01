@@ -93,17 +93,6 @@ export default async function EditUserPage({
                 />
               </Field>
             </FieldRow>
-
-            <Field
-              label="Clientdata sheet alias"
-              hint="Only needed when column A of the sheet spells this person differently from the CRM. Leave blank otherwise."
-            >
-              <Input
-                name="sheetAlias"
-                defaultValue={person.sheetAlias ?? ""}
-                maxLength={120}
-              />
-            </Field>
           </ActionForm>
 
           <p className="mt-4 border-t pt-3 text-sm leading-relaxed text-[var(--text-muted)]">

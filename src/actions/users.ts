@@ -156,7 +156,7 @@ export async function setActingSalesmanAction(formData: FormData): Promise<void>
   revalidatePath("/", "layout");
 }
 
-/** Edit somebody's name, email, phone or sheet alias. */
+/** Edit somebody's name, email or phone. */
 export async function updateUserAction(
   _previous: unknown,
   formData: FormData,
@@ -168,7 +168,6 @@ export async function updateUserAction(
       name: text(formData, "name"),
       email: text(formData, "email"),
       phone: text(formData, "phone") || null,
-      sheetAlias: text(formData, "sheetAlias") || null,
     });
 
     refreshPeople();
@@ -207,64 +206,6 @@ export async function setUserActiveAction(
     await setUserActive(actor, targetId, isActive);
     refreshPeople();
     return ok(undefined, isActive ? "Reactivated." : "Deactivated.");
-  });
-}
-
-/**
- * Pull the client book across from the Clientdata sheet.
- *
- * Runs inline rather than in the background: it is a deliberate admin action
- * and the report of what matched, what did not, and which sales executives
- * need an alias is the whole point of pressing the button.
- */
-export async function importClientsAction(
-  _previous: unknown,
-  _formData: FormData,
-): Promise<ActionResult<undefined>> {
-  return actionGuard(async () => {
-    const actor = await requireUserOrThrow();
-    const { importClientsFromSheet } = await import("@/server/client-import");
-
-    const report = await importClientsFromSheet(actor);
-    revalidatePath("/sources");
-    revalidatePath("/quotations/new");
-
-    const unmatched =
-      report.unmatched.length > 0
-        ? ` Unmatched sales executives: ${report.unmatched
-            .map((row) => `${row.name} (${row.clients})`)
-            .join(", ")}. Set a sheet alias on those accounts and run it again.`
-        : "";
-
-    return ok(
-      undefined,
-      `Read ${report.read} row(s): ${report.created} new client(s), ${report.updated} updated, ${report.skipped} already up to date.${unmatched}`,
-    );
-  });
-}
-
-/** Retry whatever the Google mirror has not managed to push yet. */
-export async function retryMirrorsAction(
-  _previous: unknown,
-  _formData: FormData,
-): Promise<ActionResult<undefined>> {
-  return actionGuard(async () => {
-    const { requireAuth } = await import("@/lib/auth");
-    await requireAuth("integration.sync.run");
-
-    const { retryPendingMirrors } = await import("@/server/sheet-mirror");
-    const result = await retryPendingMirrors(25);
-
-    revalidatePath("/sources");
-    revalidatePath("/quotations");
-
-    if (result.attempted === 0) {
-      return ok(undefined, "Nothing is waiting to be mirrored.");
-    }
-    return ok(
-      undefined,
-      `Retried ${result.attempted}, ${result.succeeded} succeeded.`,
-    );
   });
 }
 

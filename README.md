@@ -217,32 +217,6 @@ platform-specific binary. This is 2MB of plain JavaScript.
 > that, so `next.config.ts` force-includes those files. Without it every PDF
 > render fails at runtime with MODULE_NOT_FOUND while the build stays green.
 
-### The Google mirror
-
-Quotations are written to Postgres **first** and pushed to the Sheet and Drive
-afterwards, in `next/server`'s `after()` so the button does not wait on a PDF
-render and two Google round trips.
-
-That ordering is the whole design: Google being slow, rate limited or down can
-never lose a quotation or block a CRE. A failed push is recorded on the
-quotation with the reason, shown on the Quotations page, and retried - by hand
-from Lead sources, or by a cron on `POST /api/cron/mirror`.
-
-Re-mirroring overwrites the same row and the same Drive file rather than
-appending a second, so the sheet holds one live line per quotation.
-
-### Client import
-
-`Clientdata` is pulled into Company and Contact records from the Lead sources
-page. Idempotent: re-running fills gaps and never overwrites something a person
-has since typed.
-
-Matching a sheet's sales-executive spelling to a CRM account is done by exact
-normalised name or by an explicit `User.sheetAlias`, never by fuzzy similarity.
-Anything unmatched is imported unassigned and reported by name, because
-silently attaching a client to the wrong salesman is worse than leaving it
-visibly unassigned.
-
 ## How the rules are enforced
 
 ### The grab is race safe

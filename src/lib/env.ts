@@ -65,13 +65,6 @@ const schema = z.object({
   META_APP_SECRET: z.string().default(""),
   META_VERIFY_TOKEN: z.string().default(""),
   META_PAGE_ACCESS_TOKEN: z.string().default(""),
-  GOOGLE_SERVICE_ACCOUNT_EMAIL: z.string().default(""),
-  GOOGLE_PRIVATE_KEY: z.string().default(""),
-  GOOGLE_SHEET_ID: z.string().default(""),
-  GOOGLE_DRIVE_FOLDER_ID: z.string().default(""),
-  GOOGLE_SHEET_CLIENTS_TAB: z.string().default("Clientdata"),
-  GOOGLE_SHEET_QUOTATIONS_TAB: z.string().default("SALES CRM"),
-  GOOGLE_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
 
   QUOTATION_NUMBER_START: z.coerce.number().int().positive().default(20),
 
@@ -188,17 +181,3 @@ export const isMetaEnabled = () => env.META_APP_SECRET.length > 0;
 export const isCronEnabled = () => env.CRON_SECRET.length > 0;
 
 export const metaWebhookUrl = () => `${env.APP_URL}/api/webhooks/meta`;
-
-/**
- * The Google mirror is off until a service account, a sheet and a Drive folder
- * are all configured. Half-configured is treated as off rather than as an
- * error, exactly like the other integrations.
- */
-export const isGoogleEnabled = () =>
-  env.GOOGLE_SERVICE_ACCOUNT_EMAIL.length > 0 &&
-  env.GOOGLE_PRIVATE_KEY.length > 0 &&
-  env.GOOGLE_SHEET_ID.length > 0;
-
-/** Drive upload additionally needs a folder to put the file in. */
-export const isDriveEnabled = () =>
-  isGoogleEnabled() && env.GOOGLE_DRIVE_FOLDER_ID.length > 0;

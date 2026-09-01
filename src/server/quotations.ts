@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
 import type { Prisma } from "@/generated/prisma/client";
-import type { QuotationStatus, MirrorStatus } from "@/generated/prisma/enums";
+import type { QuotationStatus } from "@/generated/prisma/enums";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { requirePermission } from "@/lib/permissions";
 import type { SessionUser } from "@/lib/session";
@@ -139,8 +139,6 @@ export interface QuotationListItem {
   itemCount: number;
   /** "214.6 SQM · 3 NOS". Empty when no line carries a unit. */
   quantityText: string;
-  pdfUrl: string | null;
-  sheetStatus: MirrorStatus;
   createdAt: Date;
   validUntil: Date | null;
   /** 1 means saved once and never reworked. */
@@ -173,10 +171,6 @@ export interface QuotationDetail extends QuotationListItem {
   /** Who actually built it. Shown in the CRM, deliberately not on the PDF. */
   creMobile: string | null;
   creEmail: string | null;
-  sheetError: string | null;
-  sheetSyncedAt: Date | null;
-  /** Which row of the mirror tab this quotation owns, once appended. */
-  sheetRowNumber: number | null;
   /**
    * Editing stays open after an order exists. The order value follows the
    * new payable amount, and the superseded version is kept as a revision.
@@ -202,8 +196,6 @@ const LIST_SELECT = {
   partyName: true,
   leadId: true,
   payablePaise: true,
-  pdfUrl: true,
-  sheetStatus: true,
   createdAt: true,
   validUntil: true,
   revisionCount: true,
@@ -230,8 +222,6 @@ function toListItem(row: ListRow): QuotationListItem {
     payablePaise: toPaise(row.payablePaise),
     itemCount: row._count.items,
     quantityText: formatQuantityTotals(quantityTotals(row.items)),
-    pdfUrl: row.pdfUrl,
-    sheetStatus: row.sheetStatus,
     createdAt: row.createdAt,
     validUntil: row.validUntil,
     revisionCount: row.revisionCount,
@@ -241,7 +231,7 @@ function toListItem(row: ListRow): QuotationListItem {
 /**
  * The viewer background jobs act as.
  *
- * The Google mirror and the PDF job legitimately need to read a quotation
+ * The PDF job legitimately needs to read a quotation
  * that belongs to somebody else. Rather than adding an unscoped query that
  * could be called by mistake from a request path, they pass this explicitly,
  * so every read still goes through the same scope machinery and the intent is
@@ -347,9 +337,6 @@ export async function getQuotation(
       subTotalPaise: true,
       freightPaise: true,
       gstPercent: true,
-      sheetError: true,
-      sheetSyncedAt: true,
-      sheetRow: true,
       cre: { select: { name: true, phone: true, email: true } },
       salesman: { select: { name: true, phone: true, email: true } },
       lead: {
@@ -425,9 +412,6 @@ export async function getQuotation(
     salesmanEmail: row.salesman?.email ?? row.lead?.owner?.email ?? null,
     creMobile: row.cre.phone,
     creEmail: row.cre.email,
-    sheetError: row.sheetError,
-    sheetSyncedAt: row.sheetSyncedAt,
-    sheetRowNumber: row.sheetRow,
     canEdit: writable === 1,
     canPlaceOrder:
       writable === 1 && !hasOrder && items.length > 0 && totals.payablePaise > 0,
@@ -890,9 +874,6 @@ export async function saveQuotationItems(
         gstPercent: totals.gstPercent,
         gstPaise: toBigIntPaise(totals.gstPaise),
         payablePaise: toBigIntPaise(totals.payablePaise),
-        // Any edit puts a mirrored quotation back in the queue, so the Sheet
-        // never keeps showing a superseded total.
-        sheetStatus: "PENDING",
       },
     });
 
@@ -1119,7 +1100,6 @@ export async function placeOrderFromQuotation(
             state: quotation.billingState,
             gstin: quotation.customerGst,
             salesmanId,
-            sheetSalesExecutive: null,
           },
           select: { id: true },
         });
@@ -1164,7 +1144,7 @@ export async function placeOrderFromQuotation(
 
       await tx.quotation.update({
         where: { id: quotation.id },
-        data: { status: "ACCEPTED", acceptedAt: new Date(), sheetStatus: "PENDING" },
+        data: { status: "ACCEPTED", acceptedAt: new Date() },
       });
 
       if (quotation.leadId) {
@@ -1258,8 +1238,7 @@ export async function handOverQuotation(
   await prisma.$transaction(async (tx) => {
     await tx.quotation.update({
       where: { id: quotation.id },
-      // The Sheet row names the CRE, so it has to be rewritten.
-      data: { creId: cre.id, sheetStatus: "PENDING" },
+      data: { creId: cre.id },
     });
 
     // A closed order is finished business and is left where it is.

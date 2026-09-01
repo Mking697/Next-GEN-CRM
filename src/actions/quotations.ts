@@ -21,7 +21,6 @@ import {
   updateQuotationHeader,
   type ItemInput,
 } from "@/server/quotations";
-import { queueMirror } from "@/server/sheet-mirror";
 import { recordRevision } from "@/server/quotation-revisions";
 import type { QuotationStatus } from "@/generated/prisma/enums";
 
@@ -129,7 +128,6 @@ export async function saveQuotationAction(
     const revision = await recordRevision(user, id);
 
     refresh(id);
-    queueMirror(id);
 
     if (revision && revision.revision > 1) {
       return ok(
@@ -161,15 +159,9 @@ export async function setQuotationStatusAction(
     await setQuotationStatus(user, id, status as "SENT" | "REJECTED" | "DRAFT");
     refresh(id);
 
-    // Runs after the response, so the button does not wait on a PDF render
-    // and two Google round trips.
-    if (status === "SENT") queueMirror(id);
-
     return ok(
       undefined,
-      status === "SENT"
-        ? "Marked as sent. It will be pushed to the Google Sheet and Drive."
-        : "Updated.",
+      status === "SENT" ? "Marked as sent." : "Updated.",
     );
   });
 }
@@ -183,10 +175,6 @@ export async function placeOrderAction(
     const id = text(formData, "quotationId");
 
     const result = await placeOrderFromQuotation(user, id);
-
-    // The mirrored row carries the order number and its balance, so it has to
-    // be rewritten now that an order exists.
-    queueMirror(id);
 
     refresh(id);
     revalidatePath("/orders");
@@ -219,7 +207,6 @@ export async function handOverQuotationAction(
     const result = await handOverQuotation(user, id, creId);
 
     refresh(id, optional(formData, "leadId"));
-    queueMirror(id);
 
     return ok(
       undefined,

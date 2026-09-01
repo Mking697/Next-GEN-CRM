@@ -212,14 +212,14 @@ export const PERMISSIONS = {
     group: "quotations",
     title: "Mark a quotation as sent",
     detail:
-      "Moves it out of draft and stamps the date. This is also what pushes it to the Google Sheet and uploads the PDF to Drive.",
+      "Moves it out of draft and stamps the date, so the document has a record of when it went out.",
     roles: ["OWNER", "ADMIN", "SALESMAN", "CRE"],
   },
   "quotation.delete": {
     group: "quotations",
     title: "Delete a quotation",
     detail:
-      "Only possible while no order has been placed from it. The Sheet row is left alone as a record.",
+      "Only possible while no order has been placed from it.",
     roles: MANAGEMENT,
   },
 
@@ -340,7 +340,7 @@ export const PERMISSIONS = {
     group: "people",
     title: "Edit somebody's details",
     detail:
-      "Name, email, phone and the Clientdata sheet alias. Changing an email changes what that person signs in with, so an admin cannot edit another admin - only the owner can.",
+      "Name, email and phone. Changing an email changes what that person signs in with, so an admin cannot edit another admin - only the owner can.",
     roles: MANAGEMENT,
   },
   "user.assign.cre": {

@@ -704,8 +704,6 @@ export async function deleteOrder(
         data: {
           status: "SENT",
           acceptedAt: null,
-          // The mirrored row names the order, so it has to be rewritten.
-          sheetStatus: "PENDING",
         },
       });
     }

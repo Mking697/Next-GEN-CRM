@@ -20,7 +20,7 @@ import {
 import { ActionButton, ActionForm } from "@/components/form";
 import { Field, FieldRow, Input, Select, Textarea } from "@/components/fields";
 import { QuoteGrid } from "@/components/quote-grid";
-import { MirrorBadge, QuotationBadge } from "@/components/badges";
+import { QuotationBadge } from "@/components/badges";
 import {
   Badge,
   Card,
@@ -77,7 +77,6 @@ export default async function QuotationPage({
           <span className="flex flex-wrap items-center gap-2">
             <span>{quotation.partyName}</span>
             <QuotationBadge status={quotation.status} />
-            <MirrorBadge status={quotation.sheetStatus} />
             <span className="text-[var(--text-faint)]">
               built by {quotation.creName}
             </span>
@@ -127,15 +126,6 @@ export default async function QuotationPage({
             save. The version you are replacing is kept in the rework history
             below and can be opened at any time. A value below what has already
             been received will be refused.
-          </Notice>
-        </div>
-      ) : null}
-
-      {quotation.sheetStatus === "FAILED" && quotation.sheetError ? (
-        <div className="mb-4">
-          <Notice tone="danger" title="The Google Sheet did not get this one">
-            {quotation.sheetError} &mdash; the quotation itself is saved here and
-            is safe; only the mirror is behind.
           </Notice>
         </div>
       ) : null}
@@ -505,23 +495,6 @@ export default async function QuotationPage({
               </Field>
             </ActionForm>
           </div>
-        ) : null}
-
-        {quotation.pdfUrl ? (
-          <p className="mt-4 border-t pt-3 text-sm text-[var(--text-muted)]">
-            On Drive:{" "}
-            <a
-              href={quotation.pdfUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[var(--accent-text)] hover:underline"
-            >
-              open the uploaded PDF
-            </a>
-            {quotation.sheetSyncedAt
-              ? ` · mirrored ${formatDateTime(quotation.sheetSyncedAt)}`
-              : ""}
-          </p>
         ) : null}
       </Card>
 

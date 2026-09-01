@@ -69,16 +69,6 @@ enum QuotationStatus {
   EXPIRED
 }
 
-/// Whether a quotation has reached the Google Sheet and Drive yet. The
-/// database is the source of truth; Google is a mirror that is allowed to be
-/// briefly behind, and FAILED rows can be retried without losing anything.
-enum MirrorStatus {
-  PENDING
-  SYNCED
-  FAILED
-  DISABLED
-}
-
 enum ActivityKind {
   NOTE
   STATUS_CHANGE
@@ -102,11 +92,6 @@ model User {
   phone        String?
   role         Role
   isActive     Boolean @default(true)
-
-  /// How this person is spelled in column A of the Clientdata sheet, when it
-  /// differs from their CRM name. "SUDHIR KUMAR NAGAR" in the sheet is
-  /// "Sudhir nagar" here, and only an explicit alias can bridge that safely.
-  sheetAlias String?
 
   /// The salesmen this CRE works for. Empty for every other role.
   ///
@@ -140,7 +125,6 @@ model User {
   clientCompanies  Company[]      @relation("CompanySalesman")
 
   @@index([role])
-  @@index([sheetAlias])
 }
 
 /// Which salesmen a CRE works for.
@@ -279,10 +263,6 @@ model Company {
   /// Null means unassigned, which is what an unmatched import leaves behind.
   salesmanId String?
   salesman   User?   @relation("CompanySalesman", fields: [salesmanId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-
-  /// Exactly what column A of the Clientdata sheet said, kept verbatim so an
-  /// unmatched import can be diagnosed rather than guessed at.
-  sheetSalesExecutive String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -480,14 +460,6 @@ model Quotation {
   sentAt     DateTime?
   acceptedAt DateTime?
 
-  // -- the Google mirror ---------------------------------------------------
-  /// Drive file URL of the generated PDF, once it has been uploaded.
-  pdfUrl       String?
-  sheetStatus  MirrorStatus @default(PENDING)
-  sheetRow     Int?
-  sheetSyncedAt DateTime?
-  sheetError   String?
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -500,7 +472,6 @@ model Quotation {
   @@index([leadId])
   @@index([status])
   @@index([createdAt])
-  @@index([sheetStatus])
 }
 
 /// One saved state of a quotation, kept so a rework can be traced.

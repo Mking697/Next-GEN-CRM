@@ -24,7 +24,6 @@ export interface PersonRow {
   /** For a CRE, every salesman they work for. Empty for other roles. */
   salesmen: { id: string; name: string }[];
   /** Only loaded by getPerson(); the list view has no use for it. */
-  sheetAlias?: string | null;
   createdAt: Date;
   lastLoginAt: Date | null;
   counts: { leads: number; orders: number; creOrders: number; cres: number };
@@ -99,7 +98,6 @@ export async function getPerson(
       isActive: true,
       createdAt: true,
       lastLoginAt: true,
-      sheetAlias: true,
       salesmen: SALESMEN_LINKS,
       _count: {
         select: {
@@ -120,7 +118,6 @@ export async function getPerson(
     phone: row.phone,
     role: row.role,
     isActive: row.isActive,
-    sheetAlias: row.sheetAlias,
     salesmen: row.salesmen.map((link) => link.salesman),
     createdAt: row.createdAt,
     lastLoginAt: row.lastLoginAt,
@@ -343,7 +340,6 @@ export interface UpdateUserInput {
   name?: string;
   email?: string;
   phone?: string | null;
-  sheetAlias?: string | null;
 }
 
 /**
@@ -376,8 +372,7 @@ export async function updateUser(
     name?: string;
     email?: string;
     phone?: string | null;
-    sheetAlias?: string | null;
-  } = {};
+    } = {};
 
   if (input.name !== undefined) {
     const name = cleanText(input.name, 120);
@@ -405,9 +400,6 @@ export async function updateUser(
   }
 
   if (input.phone !== undefined) data.phone = cleanText(input.phone, 40);
-  if (input.sheetAlias !== undefined) {
-    data.sheetAlias = cleanText(input.sheetAlias, 120);
-  }
 
   if (Object.keys(data).length === 0) return;
 

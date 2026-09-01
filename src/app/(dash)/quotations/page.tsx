@@ -5,7 +5,7 @@ import { can, DATA_SCOPES, SCOPE_WORDS } from "@/lib/permissions";
 import { formatDate, relativeTime } from "@/lib/dates";
 import { formatRupees } from "@/lib/money";
 import { listQuotations } from "@/server/quotations";
-import { MirrorBadge, QuotationBadge } from "@/components/badges";
+import { QuotationBadge } from "@/components/badges";
 import { Pagination } from "@/components/pagination";
 import {
   Card,
@@ -155,10 +155,7 @@ export default async function QuotationsPage({
                     </div>
                   </Td>
                   <Td>
-                    <div className="flex flex-col items-start gap-1">
-                      <QuotationBadge status={quotation.status} />
-                      <MirrorBadge status={quotation.sheetStatus} />
-                    </div>
+                    <QuotationBadge status={quotation.status} />
                   </Td>
                   <Td className="text-sm text-[var(--text-muted)]">
                     {quotation.creName}

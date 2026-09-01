@@ -9,7 +9,6 @@ import {
 import type {
   LeadSource,
   LeadStatus,
-  MirrorStatus,
   OrderStage,
   QuotationStatus,
 } from "@/generated/prisma/enums";
@@ -74,15 +73,4 @@ export function QuotationBadge({ status }: { status: QuotationStatus }) {
           ? "accent"
           : "neutral";
   return <Badge tone={tone}>{QUOTATION_LABEL[status]}</Badge>;
-}
-
-/**
- * Whether the Google Sheet and Drive have caught up. The database is the
- * source of truth, so a lagging mirror is information, not an error state.
- */
-export function MirrorBadge({ status }: { status: MirrorStatus }) {
-  if (status === "SYNCED") return <Badge tone="ok">On Sheet</Badge>;
-  if (status === "FAILED") return <Badge tone="danger">Sheet failed</Badge>;
-  if (status === "DISABLED") return <Badge>Sheet off</Badge>;
-  return <Badge tone="warn">Sheet pending</Badge>;
 }
