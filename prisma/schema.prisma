@@ -118,25 +118,6 @@ model User {
   /// The CREs assigned to this salesman.
   cres CreSalesman[] @relation("CreSalesmanSalesman")
 
-  /// DEPRECATED, and read by nothing. Superseded by CreSalesman above, which
-  /// can hold more than one salesman.
-  ///
-  /// Deliberately still here so the release that introduces CreSalesman is an
-  /// expand-only migration: the previous version of the app is still running
-  /// while the new one builds, and it reads this column on every request. It
-  /// gets dropped in the release after, once nothing old is left running.
-  ///
-  /// The contract migration, when that happens:
-  ///
-  ///   ALTER TABLE "User" DROP CONSTRAINT "User_managerId_fkey";
-  ///   DROP INDEX "User_managerId_idx";
-  ///   ALTER TABLE "User" DROP COLUMN "managerId";
-  ///
-  /// ...and delete these three fields plus the @@index below.
-  managerId  String?
-  manager    User?   @relation("LegacyManager", fields: [managerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  legacyCres User[]  @relation("LegacyManager")
-
   createdById  String?
   createdBy    User?  @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
   createdUsers User[] @relation("UserCreatedBy")
@@ -160,8 +141,6 @@ model User {
 
   @@index([role])
   @@index([sheetAlias])
-  /// Goes with the deprecated managerId above; dropped in the same release.
-  @@index([managerId])
 }
 
 /// Which salesmen a CRE works for.
