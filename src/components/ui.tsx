@@ -330,8 +330,10 @@ export function Td({
 // Links and buttons that are just links
 // ---------------------------------------------------------------------------
 
+// cursor-pointer is here rather than on each caller: a <button> does not get
+// one from the browser, and every button in the app comes through this string.
 const BUTTON_BASE =
-  "inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-base font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-55";
+  "inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-base font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-55";
 
 export const buttonStyles = {
   base: BUTTON_BASE,

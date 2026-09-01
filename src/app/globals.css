@@ -40,6 +40,17 @@
   --text-xl: 1.375rem; /* 22px - stat values, the calculator */
   --text-xl--line-height: 1.15;
 
+  /*
+   * One step past the app's scale, and used on exactly one page.
+   *
+   * Every screen behind the sign-in is dense working software where 22px is
+   * the largest thing on it. The landing page is the one surface with a
+   * different job - somebody deciding whether this is for them - so it gets a
+   * headline size, and the rest of the app never sees it.
+   */
+  --text-display: clamp(2rem, 1.2rem + 3.2vw, 3.25rem);
+  --text-display--line-height: 1.04;
+
   /* Radius is left on Tailwind's defaults on purpose: md/lg/xl already line
      up with chip/control/card, and the app already uses them that way. */
 }
@@ -93,6 +104,30 @@
   --pad-card: 1rem;
   --row-py: 0.375rem;
   --cell-py: 0.3125rem;
+
+  /*
+   * The landing page's left panel.
+   *
+   * A deliberately darker surface than anything in the app, so the first
+   * screen has some weight to it - but built from the same accent hue, so it
+   * reads as the same product rather than a marketing site bolted on the
+   * front. Defined for both themes here rather than inside a media query, so
+   * neither one can end up with text on the wrong ground.
+   */
+  --panel: oklch(0.27 0.06 268);
+  --panel-2: oklch(0.22 0.05 268);
+  --panel-text: oklch(0.97 0.01 268);
+  --panel-muted: oklch(0.76 0.03 268);
+  --panel-line: oklch(0.38 0.05 268);
+  /*
+   * The panel's own accent, and NOT --accent-text.
+   *
+   * The panel is dark in both themes, so anything drawn on it needs a light
+   * foreground in both. --accent-text flips with the theme - it is a dark
+   * violet in light mode - which measured 2.11:1 here. This one does not
+   * flip, and measures about 9:1.
+   */
+  --panel-accent: oklch(0.82 0.12 268);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -128,6 +163,14 @@
 
     --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.3);
     --shadow: 0 1px 3px oklch(0 0 0 / 0.4), 0 8px 24px -12px oklch(0 0 0 / 0.5);
+
+    /* Darker again, so the panel still separates from a dark page. */
+    --panel: oklch(0.235 0.05 268);
+    --panel-2: oklch(0.185 0.04 268);
+    --panel-text: oklch(0.96 0.01 268);
+    --panel-muted: oklch(0.72 0.03 268);
+    --panel-line: oklch(0.33 0.04 268);
+    --panel-accent: oklch(0.82 0.12 268);
   }
 }
 
@@ -232,6 +275,30 @@ details[open] > summary .chev {
 
 .rise {
   animation: rise 0.18s ease-out both;
+}
+
+/*
+ * The same rise, slower and sequenced, for the landing page only.
+ *
+ * One list arriving in order reads as the page composing itself; the app's
+ * 0.18s rise is too quick to be seen as a sequence. Delay is capped so a long
+ * list never leaves somebody waiting on the last item, and the global
+ * reduced-motion rule below switches all of it off.
+ */
+@keyframes rise-far {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.stagger > * {
+  animation: rise-far 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
 }
 
 @media (prefers-reduced-motion: reduce) {
