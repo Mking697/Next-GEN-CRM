@@ -36,7 +36,10 @@ export default async function PeoplePage({
   const user = await requirePageAccess("user.view", "/people");
   const { deleted } = await searchParams;
 
-  const [people, salesmen] = await Promise.all([listUsers(user), listSalesmen()]);
+  const [people, salesmen] = await Promise.all([
+    listUsers(user),
+    listSalesmen(user.orgId),
+  ]);
   const roles = creatableRoles(user.role);
   const startingPassword = suggestPassword();
 

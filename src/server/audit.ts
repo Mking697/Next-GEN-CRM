@@ -43,8 +43,9 @@ export interface AuditRow {
   createdAt: Date;
 }
 
-export async function listAudit(limit = 100): Promise<AuditRow[]> {
+export async function listAudit(orgId: string, limit = 100): Promise<AuditRow[]> {
   const rows = await prisma.auditEvent.findMany({
+    where: { orgId },
     orderBy: { createdAt: "desc" },
     take: limit,
     select: {

@@ -31,7 +31,7 @@ export default async function SourcesPage() {
 
   const [indiamart, audit] = await Promise.all([
     getIndiamartStatus(integrationOrg ?? "__none__"),
-    can(user.role, "audit.view") ? listAudit(40) : Promise.resolve([]),
+    can(user.role, "audit.view") ? listAudit(user.orgId, 40) : Promise.resolve([]),
   ]);
   const meta = getMetaStatus();
 

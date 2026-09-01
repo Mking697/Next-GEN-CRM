@@ -130,11 +130,11 @@ export async function getPerson(
   };
 }
 
-export async function listSalesmen(): Promise<
-  { id: string; name: string; email: string; creCount: number }[]
-> {
+export async function listSalesmen(
+  orgId: string,
+): Promise<{ id: string; name: string; email: string; creCount: number }[]> {
   const rows = await prisma.user.findMany({
-    where: { role: "SALESMAN", isActive: true },
+    where: { orgId, role: "SALESMAN", isActive: true },
     orderBy: { name: "asc" },
     select: {
       id: true,
@@ -170,7 +170,10 @@ export interface CreateUserInput {
  * not an active salesman. Shared by createUser and setCreSalesmen so the two
  * cannot drift on what counts as a valid assignment.
  */
-async function validateSalesmanIds(ids: string[] | undefined): Promise<string[]> {
+async function validateSalesmanIds(
+  orgId: string,
+  ids: string[] | undefined,
+): Promise<string[]> {
   const wanted = [...new Set((ids ?? []).filter((id) => id.length > 0))];
   if (wanted.length === 0) {
     throw new ValidationError("Choose at least one salesman for this CRE.", {
@@ -179,7 +182,7 @@ async function validateSalesmanIds(ids: string[] | undefined): Promise<string[]>
   }
 
   const found = await prisma.user.findMany({
-    where: { id: { in: wanted }, role: "SALESMAN", isActive: true },
+    where: { id: { in: wanted }, orgId, role: "SALESMAN", isActive: true },
     select: { id: true },
   });
   if (found.length !== wanted.length) {
@@ -230,7 +233,9 @@ export async function createUser(
 
   // A CRE works for at least one salesman; everyone else for nobody.
   const salesmanIds =
-    input.role === "CRE" ? await validateSalesmanIds(input.salesmanIds) : [];
+    input.role === "CRE"
+      ? await validateSalesmanIds(actor.orgId, input.salesmanIds)
+      : [];
 
   const created = await prisma.user.create({
     data: {
@@ -306,7 +311,7 @@ export async function setCreSalesmen(
   });
   if (!cre) throw new NotFoundError("That CRE");
 
-  const wanted = await validateSalesmanIds(salesmanIds);
+  const wanted = await validateSalesmanIds(actor.orgId, salesmanIds);
   const current = cre.salesmen.map((link) => link.salesmanId);
 
   const added = wanted.filter((id) => !current.includes(id));
@@ -314,7 +319,7 @@ export async function setCreSalesmen(
   if (added.length === 0 && removed.length === 0) return;
 
   const names = await prisma.user.findMany({
-    where: { id: { in: wanted } },
+    where: { id: { in: wanted }, orgId: actor.orgId },
     orderBy: { name: "asc" },
     select: { name: true },
   });
@@ -572,7 +577,12 @@ export async function previewDeletion(
   const blockedReason = deletionBlockReason(actor, target);
 
   const candidates = await prisma.user.findMany({
-    where: { role: "SALESMAN", isActive: true, NOT: { id: target.id } },
+    where: {
+      orgId: actor.orgId,
+      role: "SALESMAN",
+      isActive: true,
+      NOT: { id: target.id },
+    },
     orderBy: { name: "asc" },
     select: { id: true, name: true, email: true },
   });

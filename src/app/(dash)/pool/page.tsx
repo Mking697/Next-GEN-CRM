@@ -47,7 +47,7 @@ export default async function PoolPage({
 
   const canGrab = can(user.role, "lead.grab");
   const canAssign = can(user.role, "lead.assign");
-  const salesmen = canAssign ? await listSalesmenForAssign() : [];
+  const salesmen = canAssign ? await listSalesmenForAssign(user.orgId) : [];
 
   return (
     <>

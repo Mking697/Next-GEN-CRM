@@ -36,7 +36,11 @@ export async function platformLoginAction(
     // data, so it gets a third of the attempts.
     const ip = (await requestIp()) ?? "unknown";
     const key = `platform-login:${email}:${ip}`;
-    const limit = hit(key, Math.max(3, Math.floor(env.LOGIN_MAX_ATTEMPTS / 3)), env.LOGIN_WINDOW_MINUTES);
+    const limit = await hit(
+      key,
+      Math.max(3, Math.floor(env.LOGIN_MAX_ATTEMPTS / 3)),
+      env.LOGIN_WINDOW_MINUTES,
+    );
     if (!limit.allowed) {
       return fail(
         `Too many attempts. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minute(s).`,
@@ -45,7 +49,7 @@ export async function platformLoginAction(
     }
 
     const admin = await platformLogin(email, password);
-    reset(key);
+    await reset(key);
 
     redirect(admin.mustChangePassword ? "/admin/password" : "/admin");
   });

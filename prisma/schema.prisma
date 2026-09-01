@@ -821,6 +821,27 @@ model SyncState {
   @@id([orgId, key])
 }
 
+/// A fixed-window counter for login brute-force protection.
+///
+/// Not scoped to an organisation: the key already encodes what is being
+/// limited (e.g. "login:<email>:<ip>"), and rate limiting has to work before
+/// any organisation is known - a login attempt against an email that does not
+/// exist still has to be throttled.
+///
+/// Backed by the database rather than process memory because this app runs on
+/// Vercel: each request can land on an independently cold-started serverless
+/// instance with no shared memory, so an in-process counter would reset on
+/// every new instance and never actually enforce the limit. `hit()` in
+/// lib/rate-limit.ts increments this with one atomic INSERT ... ON CONFLICT,
+/// so concurrent requests across instances still serialise correctly.
+model RateLimit {
+  key     String   @id
+  count   Int      @default(1)
+  resetAt DateTime
+
+  @@index([resetAt])
+}
+
 /// Append-only trail. User deletions and work transfers write here, so there
 /// is always a record of where a deleted user's leads and orders went.
 model AuditEvent {

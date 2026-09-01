@@ -351,8 +351,10 @@ export async function grabLead(
 
   if (result.count !== 1) {
     // Either it never existed, or somebody else won the race a moment ago.
-    const taken = await prisma.lead.findUnique({
-      where: { id: leadId },
+    // Scoped the same as the update above - a foreign org's lead must read as
+    // not-found, never leak who owns it.
+    const taken = await prisma.lead.findFirst({
+      where: { id: leadId, orgId: user.orgId },
       select: { owner: { select: { name: true } } },
     });
     if (!taken) throw new NotFoundError("That lead");
@@ -387,14 +389,15 @@ export async function assignLead(
   requirePermission(user.role, "lead.assign");
 
   const salesman = await prisma.user.findFirst({
-    where: { id: salesmanId, role: "SALESMAN", isActive: true },
+    where: { id: salesmanId, orgId: user.orgId, role: "SALESMAN", isActive: true },
     select: { id: true, name: true },
   });
   if (!salesman) throw new ValidationError("Pick an active salesman.");
 
-  // Same conditional update, same guarantee.
+  // poolWhere() rather than a hand-written `ownerId: null`, same as grabLead -
+  // this is what keeps the assignment from ever reaching another org's lead.
   const result = await prisma.lead.updateMany({
-    where: { id: leadId, ownerId: null },
+    where: { AND: [{ id: leadId, ownerId: null }, poolWhere(user)] },
     data: { ownerId: salesman.id, grabbedAt: new Date() },
   });
 
@@ -789,11 +792,11 @@ export async function handLeadToCre(
 }
 
 /** Active salesmen, for the assign dropdown. */
-export async function listSalesmenForAssign(): Promise<
-  { id: string; name: string; email: string }[]
-> {
+export async function listSalesmenForAssign(
+  orgId: string,
+): Promise<{ id: string; name: string; email: string }[]> {
   return prisma.user.findMany({
-    where: { role: "SALESMAN", isActive: true },
+    where: { orgId, role: "SALESMAN", isActive: true },
     select: { id: true, name: true, email: true },
     orderBy: { name: "asc" },
   });

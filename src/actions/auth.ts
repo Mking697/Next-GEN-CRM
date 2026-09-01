@@ -39,7 +39,7 @@ export async function loginAction(
     // user by hammering their address from elsewhere.
     const ip = (await requestIp()) ?? "unknown";
     const key = `login:${email}:${ip}`;
-    const limit = hit(key, env.LOGIN_MAX_ATTEMPTS, env.LOGIN_WINDOW_MINUTES);
+    const limit = await hit(key, env.LOGIN_MAX_ATTEMPTS, env.LOGIN_WINDOW_MINUTES);
     if (!limit.allowed) {
       return fail(
         `Too many attempts. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minute(s).`,
@@ -122,7 +122,7 @@ export async function loginAction(
       );
     }
 
-    reset(key);
+    await reset(key);
 
     // Opportunistically upgrade a hash written under weaker parameters.
     if (needsRehash(user.passwordHash)) {
