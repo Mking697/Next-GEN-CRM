@@ -1,13 +1,13 @@
 /**
- * A minimal, valid environment for the unit tests.
+ * A minimal, valid environment for the tests.
  *
  * lib/env validates lazily and memoises, so this has to run before any module
  * under test touches `env`. It is wired in as a `--import` on the test script
  * for exactly that reason.
  *
- * None of these values reach a network. The database URLs are never connected
- * to: every module tested here is pure, and anything that would open a
- * connection belongs in an integration test with a real database.
+ * Unit tests never open a connection, so the database URLs below are
+ * placeholders. Integration tests do, and they only run when TEST_DATABASE_URL
+ * names a real, disposable Postgres - see tests/helpers/db.ts.
  */
 
 const defaults = {
@@ -22,4 +22,22 @@ const defaults = {
 
 for (const [key, value] of Object.entries(defaults)) {
   if (!process.env[key]) process.env[key] = value;
+}
+
+/**
+ * Point the app's own connection at the throwaway database.
+ *
+ * lib/db reads env.DATABASE_URL, and the code under test imports that module
+ * rather than taking a client as an argument. Overriding here - before any of
+ * it loads - is what lets the real functions run against a real Postgres
+ * without threading a connection through every signature.
+ *
+ * TEST_DATABASE_URL is deliberately separate from DATABASE_URL: these tests
+ * TRUNCATE every table, so pointing them at a development database by
+ * forgetting one variable would destroy real data. You have to name the
+ * throwaway one explicitly.
+ */
+if (process.env.TEST_DATABASE_URL) {
+  process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+  process.env.DIRECT_DATABASE_URL = process.env.TEST_DATABASE_URL;
 }

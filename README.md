@@ -60,7 +60,8 @@ the owner creates admins, admins create salesmen and CREs.
 | `npm run db:deploy` | `prisma migrate deploy` against `DIRECT_DATABASE_URL` |
 | `npm run seed` | Creates the owner. Idempotent: does nothing if an owner exists |
 | `npm run typecheck` | `tsc --noEmit`, tests included |
-| `npm test` | The unit suite, on Node's built-in runner |
+| `npm test` | The test suite, on Node's built-in runner |
+| `npm run reset-password` | Break glass: reset any account's password from the shell |
 
 ---
 
@@ -297,12 +298,60 @@ actually live:
 | `permissions.test.ts` | Enforcement and the Guidebook agree for every role and every permission; no role is granted a scope the queries never apply |
 | `dates.test.ts` | A month means a month in `APP_TIMEZONE`, so an order confirmed at 3am IST on the 1st lands in the right month and the right year |
 
-Two things the suite deliberately does not do. It never opens a database
-connection: anything that would is integration territory and belongs with a
-real Postgres, not with a mock that agrees with whatever the code does today.
-And it runs with `--conditions=react-server`, because the modules under test
+It runs with `--conditions=react-server`, because the modules under test
 import `server-only`; without it the suite would be testing a file the server
 never loads.
+
+### The integration tests
+
+Three things this application promises are properties of Postgres, not of the
+TypeScript, and a mock would only ever agree with whatever the code does
+today:
+
+| File | What it proves |
+|---|---|
+| `grab-race.test.ts` | Ten salesmen grabbing one lead at the same instant leaves exactly one owner, and one GRAB activity |
+| `payment-lock.test.ts` | Concurrent payments can never sum past the order value - the `SELECT ... FOR UPDATE` really serialises them |
+| `delete-user.test.ts` | Deleting a user moves leads, orders, quotations and CREs, preserves stage verbatim, and **rolls back rather than orphaning** - a refused deletion leaves no audit row either |
+
+They need a real, throwaway Postgres, and they **skip cleanly** when one is not
+named, so `npm test` works on a machine with no database:
+
+```bash
+docker run -d --name crm-test-pg   -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=crm_test   -p 55432:5432 postgres:16-alpine
+
+export TEST_DATABASE_URL="postgresql://test:test@localhost:55432/crm_test"
+DIRECT_DATABASE_URL="$TEST_DATABASE_URL" npx prisma migrate deploy
+npm test
+```
+
+`TEST_DATABASE_URL` is deliberately a separate variable from `DATABASE_URL`:
+these tests `TRUNCATE` every table, so pointing them at a development database
+by forgetting one variable would destroy real data. You have to name the
+throwaway one on purpose.
+
+The test script passes `--test-concurrency=1`. Node runs test *files* in
+parallel by default, and these share one database, so one file's truncate was
+deleting another file's fixtures mid-test.
+
+### Getting back in
+
+Only the owner may reset an owner's password, there is no email-based reset
+yet, and `npm run seed` is idempotent - it does nothing once an owner exists.
+So an owner who forgets their password cannot be helped by anybody. That is
+what `npm run reset-password` is for:
+
+```bash
+npm run reset-password -- owner@example.com          # generates and prints one
+npm run reset-password -- owner@example.com "chosen" # or use your own
+```
+
+It grants no new authority - it needs `DIRECT_DATABASE_URL` and `AUTH_SECRET`,
+and whoever holds those could already write the row by hand. What it adds is
+doing it correctly: the same scrypt parameters the app verifies against, every
+session torn down in the same transaction, and an audit row written with a
+null actor, so a password changed from a shell is as visible afterwards as one
+changed from the People page.
 
 ---
 
