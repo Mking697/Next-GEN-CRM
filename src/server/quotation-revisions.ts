@@ -312,6 +312,7 @@ export async function recordRevision(
   await prisma.$transaction(async (tx) => {
     await tx.quotationRevision.create({
       data: {
+        orgId: user.orgId,
         quotationId,
         revision,
         actorId: user.id,

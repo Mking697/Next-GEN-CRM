@@ -23,6 +23,8 @@ export async function loginAction(
     const email = normalizeEmail(String(formData.get("email") ?? ""));
     const password = String(formData.get("password") ?? "");
     const next = String(formData.get("next") ?? "") || "/overview";
+    // Optional. Only needed when one email signs into two workspaces.
+    const workspace = String(formData.get("workspace") ?? "").trim().toLowerCase();
 
     if (!email || password.length === 0) {
       return fail("Enter your email address and password.", "VALIDATION");
@@ -40,23 +42,64 @@ export async function loginAction(
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true, passwordHash: true, isActive: true },
+    // An email address is unique WITHIN an organisation, not across the
+    // platform: one person can hold an account in two of them. So this looks
+    // up every candidate and lets the password decide, rather than assuming
+    // there is only ever one row.
+    const candidates = await prisma.user.findMany({
+      where: {
+        email,
+        ...(workspace ? { org: { slug: workspace } } : {}),
+      },
+      select: {
+        id: true,
+        passwordHash: true,
+        isActive: true,
+        org: { select: { slug: true, name: true, isActive: true } },
+      },
     });
 
     // Same message and roughly the same cost whether the account exists or
     // not, so this cannot be used to enumerate who works here.
-    const valid = user
-      ? await verifyPassword(password, user.passwordHash)
-      : await verifyPassword(password, "scrypt$16384$8$1$AAAA$AAAA");
-
-    if (!user || !valid) {
+    if (candidates.length === 0) {
+      await verifyPassword(password, "scrypt$16384$8$1$AAAA$AAAA");
       return fail("That email address and password do not match.", "AUTH");
     }
+
+    const matched: typeof candidates = [];
+    for (const candidate of candidates) {
+      if (await verifyPassword(password, candidate.passwordHash)) {
+        matched.push(candidate);
+      }
+    }
+
+    if (matched.length === 0) {
+      return fail("That email address and password do not match.", "AUTH");
+    }
+
+    // The same email and the same password in two workspaces. Rare, but it
+    // has one right answer and it is not for us to guess it.
+    if (matched.length > 1) {
+      return fail(
+        `That sign-in works for more than one workspace: ${matched
+          .map((m) => m.org.name)
+          .join(", ")}. Pick the one you meant.`,
+        "WORKSPACE_CHOICE",
+        { workspace: "Choose a workspace" },
+      );
+    }
+
+    const user = matched[0]!;
+
     if (!user.isActive) {
       return fail(
         "That account has been deactivated. Ask an admin to reactivate it.",
+        "AUTH",
+      );
+    }
+    if (!user.org.isActive) {
+      return fail(
+        `The ${user.org.name} workspace is not active. Contact whoever owns it.`,
         "AUTH",
       );
     }

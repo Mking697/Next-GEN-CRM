@@ -3,6 +3,7 @@ import { requirePageAccess } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { formatDateTime, relativeTime } from "@/lib/dates";
 import { getIndiamartStatus } from "@/server/ingest/indiamart";
+import { integrationOrgId } from "@/server/ingest/common";
 import { getMetaStatus } from "@/server/ingest/meta";
 import { listAudit } from "@/server/audit";
 import { runIndiamartSyncAction } from "@/actions/users";
@@ -24,8 +25,12 @@ export const metadata: Metadata = { title: "Lead sources" };
 export default async function SourcesPage() {
   const user = await requirePageAccess("integration.view", "/sources");
 
+  // Null when no workspace owns the global integration credentials, which is
+  // the normal state for every workspace except the one that does.
+  const integrationOrg = await integrationOrgId();
+
   const [indiamart, audit] = await Promise.all([
-    getIndiamartStatus(),
+    getIndiamartStatus(integrationOrg ?? "__none__"),
     can(user.role, "audit.view") ? listAudit(40) : Promise.resolve([]),
   ]);
   const meta = getMetaStatus();

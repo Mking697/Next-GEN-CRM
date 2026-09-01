@@ -14,6 +14,8 @@ import { prisma } from "@/lib/db";
 export async function audit(
   db: Db,
   entry: {
+    /** Which organisation's trail this belongs on. */
+    orgId: string;
     action: string;
     detail: string;
     actorId?: string | null;
@@ -23,6 +25,7 @@ export async function audit(
 ): Promise<void> {
   await db.auditEvent.create({
     data: {
+      orgId: entry.orgId,
       action: entry.action,
       detail: entry.detail,
       actorId: entry.actorId ?? null,

@@ -41,6 +41,17 @@ async function main(): Promise<void> {
   const password = required("SEED_OWNER_PASSWORD");
   const name = process.env.SEED_OWNER_NAME?.trim() || "Owner";
 
+  // The first workspace. Everything the seed creates belongs to it, because
+  // there is no longer any such thing as a row that belongs to nobody.
+  const orgName = process.env.SEED_ORG_NAME?.trim() || "My Company";
+  const orgSlug = (process.env.SEED_ORG_SLUG?.trim() || "main").toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(orgSlug)) {
+    throw new Error(
+      "SEED_ORG_SLUG must be 3-40 characters of lowercase letters, digits and hyphens, " +
+        "starting and ending with a letter or digit. It appears in sign-in URLs.",
+    );
+  }
+
   // The placeholders shipped in .env.example pass the length check, so they
   // need refusing by name. Seeding the owner with a password that is public
   // knowledge would be worse than not seeding at all.
@@ -69,13 +80,13 @@ async function main(): Promise<void> {
 
   try {
     const existing = await prisma.user.findFirst({
-      where: { role: "OWNER" },
+      where: { role: "OWNER", org: { slug: orgSlug } },
       select: { email: true },
     });
 
     if (existing) {
       console.log(
-        `An owner already exists (${existing.email}). Nothing was changed.`,
+        `The ${orgSlug} workspace already has an owner (${existing.email}). Nothing was changed.`,
       );
       console.log(
         "To reset that password, sign in as the owner and use the account page, or have an admin reset it.",
@@ -83,45 +94,56 @@ async function main(): Promise<void> {
       return;
     }
 
-    const clash = await prisma.user.findUnique({
-      where: { email },
-      select: { role: true },
+    const slugTaken = await prisma.organisation.findUnique({
+      where: { slug: orgSlug },
+      select: { id: true, name: true },
     });
-    if (clash) {
+    if (slugTaken) {
       throw new Error(
-        `${email} is already in use by a ${clash.role} account. Pick a different SEED_OWNER_EMAIL.`,
+        `The ${orgSlug} workspace already exists (${slugTaken.name}) but has no owner. ` +
+          "Pick a different SEED_ORG_SLUG, or give that workspace an owner by hand.",
       );
     }
 
-    const owner = await prisma.user.create({
-      data: {
-        email,
-        name,
-        role: "OWNER",
-        passwordHash: await hashPasswordWith(authSecret, password),
-      },
-      select: { id: true, email: true, name: true },
+    // One transaction: a workspace with no owner is unreachable, and an owner
+    // with no workspace cannot exist at all.
+    const owner = await prisma.$transaction(async (tx) => {
+      const org = await tx.organisation.create({
+        data: { slug: orgSlug, name: orgName },
+        select: { id: true },
+      });
+
+      const created = await tx.user.create({
+        data: {
+          orgId: org.id,
+          email,
+          name,
+          role: "OWNER",
+          passwordHash: await hashPasswordWith(authSecret, password),
+        },
+        select: { id: true, email: true, name: true, orgId: true },
+      });
+
+      // The IndiaMART sync row, so the rate-limit check has something to read
+      // on the very first cron tick.
+      await tx.syncState.create({ data: { orgId: org.id, key: "indiamart" } });
+
+      return created;
     });
 
     await prisma.auditEvent.create({
       data: {
+        orgId: owner.orgId,
         action: "user.create",
         actorId: owner.id,
         targetType: "User",
         targetId: owner.id,
-        detail: `Owner account ${owner.name} (${owner.email}) created by the seed script`,
+        detail: `Workspace ${orgName} (${orgSlug}) and its owner ${owner.name} (${owner.email}) created by the seed script`,
       },
     });
 
-    // The IndiaMART sync row, so the rate-limit check has something to read
-    // on the very first cron tick.
-    await prisma.syncState.upsert({
-      where: { key: "indiamart" },
-      create: { key: "indiamart" },
-      update: {},
-    });
-
     console.log("");
+    console.log(`  Workspace "${orgName}" created, slug ${orgSlug}.`);
     console.log("  Owner account created.");
     console.log(`    email    ${owner.email}`);
     console.log("    password the value of SEED_OWNER_PASSWORD");

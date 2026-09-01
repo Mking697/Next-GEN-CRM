@@ -218,6 +218,67 @@ platform-specific binary. This is 2MB of plain JavaScript.
 > that, so `next.config.ts` force-includes those files. Without it every PDF
 > render fails at runtime with MODULE_NOT_FOUND while the build stays green.
 
+## Multi-tenancy
+
+Several companies share one database. Thirteen of the fourteen models carry an
+`orgId`; `Session` is the exception, because a session is how the application
+*finds out* which organisation a request belongs to and cannot be filtered by
+the answer it is being asked for.
+
+### Where the boundary is enforced
+
+`src/server/scope.ts`. Every list and every detail lookup already went through
+one of ten `where` builders, and each of those is now wrapped:
+
+```ts
+function inOrg<T extends object>(user: SessionUser, clause: T) {
+  return { ...clause, orgId: user.orgId };
+}
+```
+
+Applied at the boundary rather than inside each switch, so a builder written
+next year cannot forget - forgetting is not something an individual builder is
+able to do. The spread order matters too: `{ ...clause, orgId }` and not the
+reverse, so a clause carrying its own `orgId` cannot overwrite the session's.
+
+### The unique keys
+
+This is the part that bites, and it bites silently. `Lead.phoneKey`,
+`Lead.emailKey`, `(source, externalId)`, `Order.orderNo`, `Quotation.quoteNo`
+and `User.email` were all globally unique. Left that way:
+
+- one company capturing a lead would **permanently stop every other company**
+  from ever capturing the same person, and nobody would see an error - the
+  customer would simply never appear;
+- no two companies could both have an `ORD-2026-0001`.
+
+All six are now composite on `orgId`. Deduplication still works *inside* an
+organisation, and there are tests for both halves.
+
+### One email, two companies
+
+`User.email` is unique within an organisation, not across the platform. Someone
+who owns a manufacturing company and a trading company is an ordinary thing in
+this market, and they get two accounts with their own role and their own
+password.
+
+Sign-in takes an optional workspace. Leave it blank and the email finds its
+workspace on its own; it is only needed when one address signs into two, and
+the login refuses to guess between them.
+
+### What is still global
+
+IndiaMART and Meta credentials are process-wide environment variables, so they
+can only serve one organisation - one CRM key fetches one seller's enquiries.
+`INTEGRATIONS_ORG_SLUG` names the workspace they belong to. Returning nothing
+when it is unset is deliberate: delivering one seller's enquiries into somebody
+else's workspace is worse than delivering them nowhere and saying so.
+
+Moving those credentials into the database per organisation is the next piece
+of work; the cron then iterates organisations instead of reading one key.
+
+---
+
 ## How the rules are enforced
 
 ### The grab is race safe
@@ -310,6 +371,7 @@ today:
 
 | File | What it proves |
 |---|---|
+| `tenant-isolation.test.ts` | One company cannot see, open, grab or take payment on another's rows - checked against an ADMIN, whose scope is the widest any role has |
 | `grab-race.test.ts` | Ten salesmen grabbing one lead at the same instant leaves exactly one owner, and one GRAB activity |
 | `payment-lock.test.ts` | Concurrent payments can never sum past the order value - the `SELECT ... FOR UPDATE` really serialises them |
 | `delete-user.test.ts` | Deleting a user moves leads, orders, quotations and CREs, preserves stage verbatim, and **rolls back rather than orphaning** - a refused deletion leaves no audit row either |

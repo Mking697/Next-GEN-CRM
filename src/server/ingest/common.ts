@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import type { LeadSource } from "@/generated/prisma/enums";
 import { cleanText, normalizeEmail, normalizePhone } from "@/lib/dedupe";
+import { env } from "@/lib/env";
 
 /**
  * The single door every automatically-ingested lead comes through.
@@ -21,6 +22,13 @@ import { cleanText, normalizeEmail, normalizePhone } from "@/lib/dedupe";
  */
 
 export interface IncomingLead {
+  /**
+   * The organisation this enquiry belongs to.
+   *
+   * Dedupe is per organisation, not global: the same person enquiring with
+   * two different companies is two leads, and neither may hide the other.
+   */
+  orgId: string;
   source: LeadSource;
   externalId?: string | null;
   personName: string;
@@ -57,7 +65,13 @@ export async function ingestLead(input: IncomingLead): Promise<IngestResult> {
   // 1. Same delivery, seen before.
   if (externalId) {
     const seen = await prisma.lead.findUnique({
-      where: { source_externalId: { source: input.source, externalId } },
+      where: {
+        orgId_source_externalId: {
+          orgId: input.orgId,
+          source: input.source,
+          externalId,
+        },
+      },
       select: { id: true },
     });
     if (seen) return { outcome: "duplicate", leadId: seen.id };
@@ -80,7 +94,11 @@ export async function ingestLead(input: IncomingLead): Promise<IngestResult> {
 
   if (keyClauses.length > 0) {
     const existing = await prisma.lead.findFirst({
-      where: { OR: keyClauses },
+      // orgId is not optional here. A dedupe lookup without it would match
+      // another organisation's lead and quietly return their row - and no
+      // type error would ever point at it, which is exactly why the
+      // row-level-security policies exist as a second line.
+      where: { orgId: input.orgId, OR: keyClauses },
       select: {
         id: true,
         phone: true,
@@ -98,6 +116,7 @@ export async function ingestLead(input: IncomingLead): Promise<IngestResult> {
         await prisma.lead.update({ where: { id: existing.id }, data: filled });
         await prisma.leadActivity.create({
           data: {
+            orgId: input.orgId,
             leadId: existing.id,
             kind: "NOTE",
             message: `The same enquiry arrived again from ${input.source}. Missing details were filled in; nothing existing was changed.`,
@@ -113,6 +132,7 @@ export async function ingestLead(input: IncomingLead): Promise<IngestResult> {
   try {
     const lead = await prisma.lead.create({
       data: {
+        orgId: input.orgId,
         source: input.source,
         status: "NEW",
         externalId,
@@ -123,6 +143,7 @@ export async function ingestLead(input: IncomingLead): Promise<IngestResult> {
         ...fields,
         activities: {
           create: {
+            orgId: input.orgId,
             kind: "NOTE",
             message: `Lead received from ${input.source}`,
           },
@@ -135,7 +156,13 @@ export async function ingestLead(input: IncomingLead): Promise<IngestResult> {
     // Another delivery of the same lead landed between our check and our
     // write. The unique index did its job.
     if (isUniqueViolation(error)) {
-      const clash = await findByKeys(input.source, externalId, phoneKey, emailKey);
+      const clash = await findByKeys(
+        input.orgId,
+        input.source,
+        externalId,
+        phoneKey,
+        emailKey,
+      );
       return { outcome: "duplicate", leadId: clash };
     }
     throw error;
@@ -162,6 +189,7 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 async function findByKeys(
+  orgId: string,
   source: LeadSource,
   externalId: string | null,
   phoneKey: string | null,
@@ -174,7 +202,7 @@ async function findByKeys(
   if (clauses.length === 0) return null;
 
   const found = await prisma.lead.findFirst({
-    where: { OR: clauses },
+    where: { orgId, OR: clauses },
     select: { id: true },
   });
   return found?.id ?? null;
@@ -198,4 +226,29 @@ export function tally(result: IngestResult, into: SyncTally): void {
   into.fetched += 1;
   if (result.outcome === "created") into.created += 1;
   else into.duplicates += 1;
+}
+
+// ---------------------------------------------------------------------------
+// Which organisation the global integration credentials belong to
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the organisation that owns the IndiaMART and Meta credentials.
+ *
+ * There is exactly one set of them, in the environment, so there is exactly
+ * one organisation they can serve. Returning null - rather than defaulting to
+ * "the first organisation" or "all of them" - is deliberate: delivering one
+ * seller's enquiries into somebody else's workspace is worse than delivering
+ * them nowhere and saying so.
+ */
+export async function integrationOrgId(): Promise<string | null> {
+  const slug = env.INTEGRATIONS_ORG_SLUG.trim();
+  if (!slug) return null;
+
+  const org = await prisma.organisation.findUnique({
+    where: { slug },
+    select: { id: true, isActive: true },
+  });
+  if (!org || !org.isActive) return null;
+  return org.id;
 }

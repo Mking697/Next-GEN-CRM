@@ -6,6 +6,7 @@ import {
   disconnect,
   linkCre,
   makeOrder,
+  makeOrg,
   makeUser,
   receivedPaise,
   resetDatabase,
@@ -33,7 +34,13 @@ describe("recordPayment, under contention", { skip: skipWithoutDb }, () => {
     assert.ok(TEST_DB);
     await assertSchema();
   });
-  beforeEach(resetDatabase);
+  // A fresh organisation per test. Every row in the schema names one now,
+  // so there is no such thing as a fixture that belongs to nobody.
+  let org: { id: string };
+  beforeEach(async () => {
+    await resetDatabase();
+    org = await makeOrg();
+  });
   after(disconnect);
 
   /**
@@ -45,10 +52,10 @@ describe("recordPayment, under contention", { skip: skipWithoutDb }, () => {
    * payment.record on their own orders - both recording the same cheque.
    */
   async function bothPartiesOnOneOrder(amountPaise = ORDER_VALUE) {
-    const salesman = await makeUser("SALESMAN");
-    const cre = await makeUser("CRE");
-    await linkCre(cre.id, salesman.id);
-    const order = await makeOrder(salesman.id, amountPaise, { creId: cre.id });
+    const salesman = await makeUser(org.id, "SALESMAN");
+    const cre = await makeUser(org.id, "CRE");
+    await linkCre(org.id, cre.id, salesman.id);
+    const order = await makeOrder(org.id, salesman.id, amountPaise, { creId: cre.id });
     const [a, b] = await Promise.all([sessionFor(cre.id), sessionFor(salesman.id)]);
     return { order, a, b, salesman, cre };
   }
@@ -120,7 +127,7 @@ describe("recordPayment, under contention", { skip: skipWithoutDb }, () => {
     });
     // Deleting a payment is deliberately not a CRE's to do - they record
     // money, they do not unrecord it. An admin undoes a mis-entry.
-    const admin = await sessionFor((await makeUser("ADMIN")).id);
+    const admin = await sessionFor((await makeUser(org.id, "ADMIN")).id);
     await deletePayment(admin, last.id);
 
     // The order walks back on its own: there is no paymentState column to fix.
@@ -144,8 +151,8 @@ describe("recordPayment, under contention", { skip: skipWithoutDb }, () => {
     // ASSIGNED means `creId = me`, not "anything my salesman owns". This is
     // the property the two-CRE race does not exist because of.
     const { order, salesman } = await bothPartiesOnOneOrder();
-    const stranger = await makeUser("CRE");
-    await linkCre(stranger.id, salesman.id);
+    const stranger = await makeUser(org.id, "CRE");
+    await linkCre(org.id, stranger.id, salesman.id);
 
     const session = await sessionFor(stranger.id);
     await assert.rejects(() =>

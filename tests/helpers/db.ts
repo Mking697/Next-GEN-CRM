@@ -37,6 +37,7 @@ export const skipWithoutDb = TEST_DB
  * database behind if a test fails midway.
  */
 const TABLES = [
+  "Organisation",
   "AuditEvent",
   "Payment",
   "Order",
@@ -77,27 +78,51 @@ export async function assertSchema(): Promise<void> {
 let counter = 0;
 const unique = () => `${Date.now().toString(36)}${(counter += 1)}`;
 
+/**
+ * A tenant. Tests that only need one still make one, because every row in the
+ * schema now has to name an organisation.
+ */
+export async function makeOrg(
+  overrides: { slug?: string; name?: string; isActive?: boolean } = {},
+): Promise<{ id: string; slug: string; name: string }> {
+  const id = unique();
+  return prisma.organisation.create({
+    data: {
+      slug: overrides.slug ?? `org-${id}`,
+      name: overrides.name ?? `Org ${id}`,
+      isActive: overrides.isActive ?? true,
+    },
+    select: { id: true, slug: true, name: true },
+  });
+}
+
 export async function makeUser(
+  orgId: string,
   role: Role,
   overrides: { name?: string; email?: string; isActive?: boolean } = {},
-): Promise<{ id: string; name: string; email: string; role: Role }> {
+): Promise<{ id: string; name: string; email: string; role: Role; orgId: string }> {
   const id = unique();
   const user = await prisma.user.create({
     data: {
+      orgId,
       email: overrides.email ?? `${role.toLowerCase()}-${id}@test.local`,
       name: overrides.name ?? `${role} ${id}`,
       role,
       isActive: overrides.isActive ?? true,
       passwordHash: await hashPasswordWith("x".repeat(32), "password-for-tests"),
     },
-    select: { id: true, name: true, email: true, role: true },
+    select: { id: true, name: true, email: true, role: true, orgId: true },
   });
   return user;
 }
 
 /** Link a CRE to a salesman, the way an admin would. */
-export async function linkCre(creId: string, salesmanId: string): Promise<void> {
-  await prisma.creSalesman.create({ data: { creId, salesmanId } });
+export async function linkCre(
+  orgId: string,
+  creId: string,
+  salesmanId: string,
+): Promise<void> {
+  await prisma.creSalesman.create({ data: { orgId, creId, salesmanId } });
 }
 
 /**
@@ -116,6 +141,7 @@ export async function sessionFor(userId: string): Promise<SessionUser> {
       name: true,
       role: true,
       isActive: true,
+      org: { select: { id: true, name: true, slug: true } },
       salesmen: {
         orderBy: { salesman: { name: "asc" } },
         select: { salesman: { select: { id: true, name: true } } },
@@ -125,6 +151,9 @@ export async function sessionFor(userId: string): Promise<SessionUser> {
   const salesmen = user.salesmen.map((link) => link.salesman);
   return {
     id: user.id,
+    orgId: user.org.id,
+    orgName: user.org.name,
+    orgSlug: user.org.slug,
     email: user.email,
     name: user.name,
     role: user.role,
@@ -136,11 +165,13 @@ export async function sessionFor(userId: string): Promise<SessionUser> {
 }
 
 export async function makeLead(
+  orgId: string,
   overrides: { ownerId?: string | null; personName?: string; phone?: string } = {},
 ): Promise<{ id: string }> {
   const id = unique();
   return prisma.lead.create({
     data: {
+      orgId,
       source: "MANUAL",
       personName: overrides.personName ?? `Lead ${id}`,
       phone: overrides.phone ?? null,
@@ -153,17 +184,19 @@ export async function makeLead(
 
 /** A company, an order and nothing else - enough to record payments against. */
 export async function makeOrder(
+  orgId: string,
   salesmanId: string,
   amountPaise: number,
   overrides: { creId?: string | null } = {},
 ): Promise<{ id: string; orderNo: string }> {
   const id = unique();
   const company = await prisma.company.create({
-    data: { name: `Client ${id}`, salesmanId },
+    data: { orgId, name: `Client ${id}`, salesmanId },
     select: { id: true },
   });
   return prisma.order.create({
     data: {
+      orgId,
       orderNo: `ORD-TEST-${id}`,
       companyId: company.id,
       salesmanId,

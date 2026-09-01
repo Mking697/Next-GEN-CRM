@@ -48,8 +48,10 @@ export interface IndiamartStatus {
   locked: boolean;
 }
 
-export async function getIndiamartStatus(): Promise<IndiamartStatus> {
-  const state = await prisma.syncState.findUnique({ where: { key: SYNC_KEY } });
+export async function getIndiamartStatus(orgId: string): Promise<IndiamartStatus> {
+  const state = await prisma.syncState.findUnique({
+    where: { orgId_key: { orgId, key: SYNC_KEY } },
+  });
   const intervalMs = env.INDIAMART_MIN_INTERVAL_MINUTES * 60 * 1000;
 
   return {
@@ -71,7 +73,7 @@ export async function getIndiamartStatus(): Promise<IndiamartStatus> {
   };
 }
 
-export async function syncIndiamart(): Promise<SyncOutcome> {
+export async function syncIndiamart(orgId: string): Promise<SyncOutcome> {
   if (!isIndiamartEnabled()) {
     return {
       status: "disabled",
@@ -85,13 +87,13 @@ export async function syncIndiamart(): Promise<SyncOutcome> {
   const now = new Date();
 
   await prisma.syncState.upsert({
-    where: { key: SYNC_KEY },
-    create: { key: SYNC_KEY },
+    where: { orgId_key: { orgId, key: SYNC_KEY } },
+    create: { orgId, key: SYNC_KEY },
     update: {},
   });
 
   const state = await prisma.syncState.findUniqueOrThrow({
-    where: { key: SYNC_KEY },
+    where: { orgId_key: { orgId, key: SYNC_KEY } },
   });
 
   // Never call early.
@@ -111,6 +113,7 @@ export async function syncIndiamart(): Promise<SyncOutcome> {
   const staleBefore = new Date(now.getTime() - LOCK_STALE_MS);
   const claimed = await prisma.syncState.updateMany({
     where: {
+      orgId,
       key: SYNC_KEY,
       OR: [{ lockedAt: null }, { lockedAt: { lt: staleBefore } }],
     },
@@ -137,6 +140,7 @@ export async function syncIndiamart(): Promise<SyncOutcome> {
 
     for (const record of records) {
       const result = await ingestLead({
+        orgId,
         source: "INDIAMART",
         externalId: str(record.UNIQUE_QUERY_ID),
         personName: str(record.SENDER_NAME) ?? "Unknown",
@@ -153,7 +157,7 @@ export async function syncIndiamart(): Promise<SyncOutcome> {
     }
 
     await prisma.syncState.update({
-      where: { key: SYNC_KEY },
+      where: { orgId_key: { orgId, key: SYNC_KEY } },
       data: {
         lockedAt: null,
         lastSuccessAt: new Date(),
@@ -173,7 +177,7 @@ export async function syncIndiamart(): Promise<SyncOutcome> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await prisma.syncState.update({
-      where: { key: SYNC_KEY },
+      where: { orgId_key: { orgId, key: SYNC_KEY } },
       data: { lockedAt: null, lastStatus: "error", lastError: message.slice(0, 500) },
     });
     return {

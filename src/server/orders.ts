@@ -110,6 +110,7 @@ export async function confirmOrder(
     prisma.$transaction(async (tx) => {
       const company = await tx.company.create({
         data: {
+          orgId: user.orgId,
           name: companyName,
           city: cleanText(input.city, 100) ?? cleanText(lead.city, 100),
           state: cleanText(input.state, 100) ?? cleanText(lead.state, 100),
@@ -120,6 +121,7 @@ export async function confirmOrder(
 
       const contact = await tx.contact.create({
         data: {
+          orgId: user.orgId,
           companyId: company.id,
           name: contactName,
           phone: contactPhone,
@@ -130,6 +132,7 @@ export async function confirmOrder(
 
       const order = await tx.order.create({
         data: {
+          orgId: user.orgId,
           orderNo,
           leadId: lead.id,
           companyId: company.id,
@@ -150,6 +153,7 @@ export async function confirmOrder(
 
       await tx.leadActivity.create({
         data: {
+          orgId: user.orgId,
           leadId: lead.id,
           kind: "ORDER_CONFIRMED",
           actorId: user.id,
@@ -297,6 +301,7 @@ export async function handOverOrder(
     if (order.leadId) {
       await tx.leadActivity.create({
         data: {
+          orgId: user.orgId,
           leadId: order.leadId,
           kind: "HANDOVER",
           actorId: user.id,
@@ -595,6 +600,7 @@ export async function recordPayment(
 
     await tx.payment.create({
       data: {
+        orgId: user.orgId,
         orderId,
         amountPaise: toBigIntPaise(input.amountPaise),
         mode: input.mode,
@@ -610,6 +616,7 @@ export async function recordPayment(
     if (visible.leadId) {
       await tx.leadActivity.create({
         data: {
+          orgId: user.orgId,
           leadId: visible.leadId,
           kind: "PAYMENT",
           actorId: user.id,
@@ -668,6 +675,7 @@ export async function deleteOrder(
     );
 
     await audit(tx, {
+      orgId: user.orgId,
       action: "order.delete",
       actorId: user.id,
       targetType: "Order",
@@ -688,6 +696,7 @@ export async function deleteOrder(
       });
       await tx.leadActivity.create({
         data: {
+          orgId: user.orgId,
           leadId: order.leadId,
           kind: "STATUS_CHANGE",
           actorId: user.id,
@@ -765,6 +774,7 @@ export async function deletePayment(
     if (payment.order.leadId) {
       await tx.leadActivity.create({
         data: {
+          orgId: user.orgId,
           leadId: payment.order.leadId,
           kind: "PAYMENT",
           actorId: user.id,
@@ -820,6 +830,7 @@ export async function closeOrder(
     if (order.leadId) {
       await tx.leadActivity.create({
         data: {
+          orgId: user.orgId,
           leadId: order.leadId,
           kind: "CLOSED",
           actorId: user.id,

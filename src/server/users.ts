@@ -219,8 +219,9 @@ export async function createUser(
     throw new ValidationError(passwordProblem, { password: passwordProblem });
   }
 
+  // Unique within the organisation, so the lookup has to name it too.
   const existing = await prisma.user.findUnique({
-    where: { email },
+    where: { orgId_email: { orgId: actor.orgId, email } },
     select: { id: true },
   });
   if (existing) {
@@ -233,6 +234,7 @@ export async function createUser(
 
   const created = await prisma.user.create({
     data: {
+      orgId: actor.orgId,
       name,
       email,
       phone: cleanText(input.phone, 40),
@@ -240,13 +242,17 @@ export async function createUser(
       passwordHash: await hashPassword(input.password),
       createdById: actor.id,
       salesmen: {
-        create: salesmanIds.map((salesmanId) => ({ salesmanId })),
+        create: salesmanIds.map((salesmanId) => ({
+          orgId: actor.orgId,
+          salesmanId,
+        })),
       },
     },
     select: { id: true },
   });
 
   await audit(prisma, {
+    orgId: actor.orgId,
     action: "user.create",
     actorId: actor.id,
     targetType: "User",
@@ -321,10 +327,15 @@ export async function setCreSalesmen(
     }
     if (added.length > 0) {
       await tx.creSalesman.createMany({
-        data: added.map((salesmanId) => ({ creId: cre.id, salesmanId })),
+        data: added.map((salesmanId) => ({
+          orgId: actor.orgId,
+          creId: cre.id,
+          salesmanId,
+        })),
       });
     }
     await audit(tx, {
+      orgId: actor.orgId,
       action: "user.assign",
       actorId: actor.id,
       targetType: "User",
@@ -391,7 +402,7 @@ export async function updateUser(
     }
     if (email !== target.email) {
       const clash = await prisma.user.findUnique({
-        where: { email },
+        where: { orgId_email: { orgId: actor.orgId, email } },
         select: { id: true },
       });
       if (clash) throw new ConflictError("Somebody already has that email address.");
@@ -406,6 +417,7 @@ export async function updateUser(
   await prisma.$transaction(async (tx) => {
     await tx.user.update({ where: { id: target.id }, data });
     await audit(tx, {
+      orgId: actor.orgId,
       action: "user.update",
       actorId: actor.id,
       targetType: "User",
@@ -451,6 +463,7 @@ export async function resetPassword(
   await destroyAllSessions(target.id);
 
   await audit(prisma, {
+    orgId: actor.orgId,
     action: "user.password.reset",
     actorId: actor.id,
     targetType: "User",
@@ -484,6 +497,7 @@ export async function setUserActive(
     await tx.user.update({ where: { id: target.id }, data: { isActive } });
     if (!isActive) await tx.session.deleteMany({ where: { userId: target.id } });
     await audit(tx, {
+      orgId: actor.orgId,
       action: isActive ? "user.activate" : "user.deactivate",
       actorId: actor.id,
       targetType: "User",
@@ -764,6 +778,7 @@ export async function deleteUser(
       if (movable.length > 0) {
         await tx.creSalesman.createMany({
           data: movable.map((link) => ({
+            orgId: actor.orgId,
             creId: link.creId,
             salesmanId: destination.id,
           })),
@@ -791,6 +806,7 @@ export async function deleteUser(
       : "no leads, orders or CREs to move";
 
     await audit(tx, {
+      orgId: actor.orgId,
       action: "user.delete",
       actorId: actor.id,
       targetType: "User",

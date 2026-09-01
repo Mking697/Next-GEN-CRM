@@ -228,26 +228,6 @@ function toListItem(row: ListRow): QuotationListItem {
   };
 }
 
-/**
- * The viewer background jobs act as.
- *
- * The PDF job legitimately needs to read a quotation
- * that belongs to somebody else. Rather than adding an unscoped query that
- * could be called by mistake from a request path, they pass this explicitly,
- * so every read still goes through the same scope machinery and the intent is
- * visible at the call site.
- */
-export const SYSTEM_VIEWER: SessionUser = {
-  id: "__system__",
-  email: "system@internal",
-  name: "System",
-  role: "OWNER",
-  salesmen: [],
-  activeSalesmanId: null,
-  activeSalesmanName: null,
-  isActive: true,
-};
-
 // ---------------------------------------------------------------------------
 // Reading
 // ---------------------------------------------------------------------------
@@ -666,6 +646,7 @@ export async function createQuotation(
   return withQuoteNumber(async (quoteNo) => {
     const created = await prisma.quotation.create({
       data: {
+        orgId: user.orgId,
         quoteNo,
         status: "DRAFT",
         creId: user.id,
@@ -686,6 +667,7 @@ export async function createQuotation(
     if (leadId) {
       await prisma.leadActivity.create({
         data: {
+          orgId: user.orgId,
           leadId,
           kind: "NOTE",
           actorId: user.id,
@@ -849,6 +831,7 @@ export async function saveQuotationItems(
     if (priced.length > 0) {
       await tx.quotationItem.createMany({
         data: priced.map((row) => ({
+          orgId: user.orgId,
           quotationId: quotation.id,
           position: row.position,
           particular: row.particular,
@@ -1001,6 +984,7 @@ export async function setQuotationStatus(
   if (quotation.leadId) {
     await prisma.leadActivity.create({
       data: {
+        orgId: user.orgId,
         leadId: quotation.leadId,
         kind: "NOTE",
         actorId: user.id,
@@ -1095,6 +1079,7 @@ export async function placeOrderFromQuotation(
       if (!companyId) {
         const company = await tx.company.create({
           data: {
+            orgId: user.orgId,
             name: quotation.partyName,
             city: quotation.billingCity,
             state: quotation.billingState,
@@ -1109,6 +1094,7 @@ export async function placeOrderFromQuotation(
       if (!contactId) {
         const contact = await tx.contact.create({
           data: {
+            orgId: user.orgId,
             companyId,
             name: quotation.contactPerson ?? quotation.partyName,
             phone: quotation.customerMobile,
@@ -1121,6 +1107,7 @@ export async function placeOrderFromQuotation(
 
       const order = await tx.order.create({
         data: {
+          orgId: user.orgId,
           orderNo,
           leadId: quotation.leadId,
           quotationId: quotation.id,
@@ -1154,6 +1141,7 @@ export async function placeOrderFromQuotation(
         });
         await tx.leadActivity.create({
           data: {
+            orgId: user.orgId,
             leadId: quotation.leadId,
             kind: "ORDER_CONFIRMED",
             actorId: user.id,
@@ -1256,6 +1244,7 @@ export async function handOverQuotation(
       });
       await tx.leadActivity.create({
         data: {
+          orgId: user.orgId,
           leadId: quotation.leadId,
           kind: "HANDOVER",
           actorId: user.id,

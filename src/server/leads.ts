@@ -365,6 +365,7 @@ export async function grabLead(
 
   await prisma.leadActivity.create({
     data: {
+      orgId: user.orgId,
       leadId,
       kind: "GRAB",
       actorId: user.id,
@@ -403,6 +404,7 @@ export async function assignLead(
 
   await prisma.leadActivity.create({
     data: {
+      orgId: user.orgId,
       leadId,
       kind: "TRANSFER",
       actorId: user.id,
@@ -496,6 +498,7 @@ export async function createManualLead(
 
   const lead = await prisma.lead.create({
     data: {
+      orgId: user.orgId,
       source: "MANUAL",
       status: "NEW",
       personName,
@@ -513,6 +516,7 @@ export async function createManualLead(
       grabbedAt: ownsItImmediately ? now : null,
       activities: {
         create: {
+          orgId: user.orgId,
           kind: "NOTE",
           actorId: user.id,
           message: ownsItImmediately
@@ -601,6 +605,7 @@ export async function updateLead(
 
   await prisma.leadActivity.create({
     data: {
+      orgId: user.orgId,
       leadId,
       kind: "NOTE",
       actorId: user.id,
@@ -670,6 +675,7 @@ export async function setLeadStatus(
 
   await prisma.leadActivity.create({
     data: {
+      orgId: user.orgId,
       leadId,
       kind: "STATUS_CHANGE",
       actorId: user.id,
@@ -701,7 +707,13 @@ export async function addLeadNote(
   if (!lead) throw new NotFoundError("That lead");
 
   await prisma.leadActivity.create({
-    data: { leadId, kind: "NOTE", actorId: user.id, message: `${user.name}: ${text}` },
+    data: {
+      orgId: user.orgId,
+      leadId,
+      kind: "NOTE",
+      actorId: user.id,
+      message: `${user.name}: ${text}`,
+    },
   });
 }
 
@@ -766,6 +778,7 @@ export async function handLeadToCre(
     });
     await tx.leadActivity.create({
       data: {
+        orgId: user.orgId,
         leadId: lead.id,
         kind: "HANDOVER",
         actorId: user.id,

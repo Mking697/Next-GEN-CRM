@@ -21,6 +21,17 @@ const TOKEN_BYTES = 32;
 
 export interface SessionUser {
   id: string;
+  /**
+   * The organisation every query this user makes is filtered to.
+   *
+   * Read from the session row, never from anything the client can influence.
+   * server/scope.ts turns it into a where clause on every collection, and the
+   * row-level-security policies use it as a second line of defence - so this
+   * one field is what keeps one company's data away from another's.
+   */
+  orgId: string;
+  orgName: string;
+  orgSlug: string;
   email: string;
   name: string;
   role: Role;
@@ -127,6 +138,7 @@ export async function readSession(): Promise<SessionUser | null> {
           name: true,
           role: true,
           isActive: true,
+          org: { select: { id: true, name: true, slug: true, isActive: true } },
           salesmen: {
             orderBy: { salesman: { name: "asc" } },
             select: { salesman: { select: { id: true, name: true } } },
@@ -146,6 +158,10 @@ export async function readSession(): Promise<SessionUser | null> {
   // A deactivated account keeps its rows but cannot act.
   if (!session.user.isActive) return null;
 
+  // Nor can anybody in a suspended organisation - an unpaid subscription must
+  // stop the whole workspace, not just the person who forgot to pay.
+  if (!session.user.org.isActive) return null;
+
   const salesmen = session.user.salesmen.map((link) => link.salesman);
 
   // The cookie is a request for which salesman to act as, never an assertion
@@ -157,6 +173,9 @@ export async function readSession(): Promise<SessionUser | null> {
 
   return {
     id: session.user.id,
+    orgId: session.user.org.id,
+    orgName: session.user.org.name,
+    orgSlug: session.user.org.slug,
     email: session.user.email,
     name: session.user.name,
     role: session.user.role,

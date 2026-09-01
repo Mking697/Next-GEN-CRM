@@ -81,12 +81,99 @@ enum ActivityKind {
 }
 
 // ---------------------------------------------------------------------------
+// Tenants
+// ---------------------------------------------------------------------------
+
+/// One customer company using this CRM.
+///
+/// Every row that belongs to somebody carries an orgId back to here. That is
+/// denormalised on purpose: it means every query can filter on one column
+/// instead of joining its way back to a root, and it is what makes a
+/// row-level-security policy expressible on each table rather than only on a
+/// few. The foreign key on each child keeps it honest.
+///
+/// Session is the one table with no orgId, because a session is how the
+/// application FINDS OUT which organisation a request belongs to. It cannot
+/// be filtered by the answer it is being asked for.
+model Organisation {
+  id String @id @default(cuid())
+
+  /// URL-safe workspace identifier, e.g. "hicon". People sign in under it, so
+  /// the same email address can be a different account in a different
+  /// organisation without the two ever being confused.
+  slug String @unique
+  name String
+
+  // -- the letterhead ------------------------------------------------------
+  //
+  // This used to be seven environment variables read by lib/company.ts, which
+  // could only ever describe one company. A quotation is a document the
+  // customer acts on, so every field a customer reads has to belong to the
+  // organisation that sent it.
+  legalName String?
+  address   String?
+  gstin     String?
+  phone     String?
+  email     String?
+  website   String?
+
+  /// The logo itself, not a link to one.
+  ///
+  /// A quotation goes to a customer and is kept. Pointing at an image host
+  /// means the day that host goes down, or the file is moved, every document
+  /// ever sent renders with a hole in it. Logos are a few kilobytes; the
+  /// certainty is worth the column.
+  logo     Bytes?
+  logoMime String?
+
+  // -- where customers pay -------------------------------------------------
+  bankBeneficiary String?
+  bankName        String?
+  bankAccount     String?
+  bankIfsc        String?
+  bankAccountType String?
+  bankBranch      String?
+
+  /// Where this organisation's REF- series starts. Continuing an existing
+  /// numbering from an older system is a per-organisation fact.
+  quotationNumberStart Int @default(1)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users      User[]
+  leads      Lead[]
+  activities LeadActivity[]
+  companies  Company[]
+  contacts   Contact[]
+  orders     Order[]
+  payments   Payment[]
+  quotations Quotation[]
+  revisions  QuotationRevision[]
+  items      QuotationItem[]
+  creLinks   CreSalesman[]
+  syncStates SyncState[]
+  auditEvents AuditEvent[]
+
+  @@index([isActive])
+}
+
+// ---------------------------------------------------------------------------
 // People
 // ---------------------------------------------------------------------------
 
 model User {
-  id           String  @id @default(cuid())
-  email        String  @unique
+  id String @id @default(cuid())
+
+  orgId String
+  org   Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Unique within the organisation, not across the platform. One person can
+  /// hold an account in two organisations - an owner running a manufacturing
+  /// company and a trading company is an ordinary thing in this market - and
+  /// the two are separate accounts with their own role and their own password.
+  email        String
   passwordHash String
   name         String
   phone        String?
@@ -124,6 +211,8 @@ model User {
   revisions        QuotationRevision[] @relation("RevisionActor")
   clientCompanies  Company[]      @relation("CompanySalesman")
 
+  @@unique([orgId, email])
+  @@index([orgId])
   @@index([role])
 }
 
@@ -136,6 +225,10 @@ model User {
 model CreSalesman {
   id String @id @default(cuid())
 
+  orgId String
+  org   Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+
   creId String
   cre   User   @relation("CreSalesmanCre", fields: [creId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
@@ -146,6 +239,7 @@ model CreSalesman {
 
   createdAt DateTime @default(now())
 
+  @@index([orgId])
   @@unique([creId, salesmanId])
   @@index([creId])
   @@index([salesmanId])
@@ -173,6 +267,10 @@ model Session {
 
 model Lead {
   id     String     @id @default(cuid())
+
+  orgId String
+  org   Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   source LeadSource
   status LeadStatus @default(NEW)
 
@@ -190,8 +288,13 @@ model Lead {
   /// Normalised dedupe keys: digits-only phone, lowercased email.
   /// Unique and NULL-tolerant. Postgres treats each NULL as distinct, so
   /// leads with no phone or no email never collide with each other.
-  phoneKey String? @unique
-  emailKey String? @unique
+  ///
+  /// Scoped to the organisation, NOT globally unique. A plain @unique here
+  /// would mean one company capturing a lead permanently blocked every other
+  /// company from ever capturing the same person - and the failure would be
+  /// silent: the customer simply never appears.
+  phoneKey String?
+  emailKey String?
 
   /// Provider-side id (IndiaMART QUERY_ID, Meta leadgen_id) for idempotent ingest.
   externalId String?
@@ -222,7 +325,10 @@ model Lead {
   activities LeadActivity[]
   quotations Quotation[]
 
-  @@unique([source, externalId])
+  @@unique([orgId, phoneKey])
+  @@unique([orgId, emailKey])
+  @@unique([orgId, source, externalId])
+  @@index([orgId])
   @@index([creId])
   @@index([ownerId])
   @@index([status])
@@ -233,6 +339,10 @@ model Lead {
 
 model LeadActivity {
   id     String @id @default(cuid())
+
+  orgId String
+  org   Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   leadId String
   lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
@@ -244,6 +354,7 @@ model LeadActivity {
 
   createdAt DateTime @default(now())
 
+  @@index([orgId])
   @@index([leadId, createdAt])
 }
 
@@ -253,6 +364,10 @@ model LeadActivity {
 
 model Company {
   id    String  @id @default(cuid())
+
+  orgId String
+  org   Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   name  String
   city  String?
   state String?
@@ -271,12 +386,17 @@ model Company {
   orders     Order[]
   quotations Quotation[]
 
+  @@index([orgId])
   @@index([name])
   @@index([salesmanId])
 }
 
 model Contact {
   id        String  @id @default(cuid())
+
+  orgId String
+  org   Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -291,6 +411,7 @@ model Contact {
   orders     Order[]
   quotations Quotation[]
 
+  @@index([orgId])
   @@index([companyId])
 }
 
@@ -301,8 +422,13 @@ model Contact {
 model Order {
   id String @id @default(cuid())
 
-  /// Human-readable running number, e.g. ORD-2026-0007.
-  orderNo String @unique
+  orgId String
+  org   Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+
+  /// Human-readable running number, e.g. ORD-2026-0007. Every organisation
+  /// counts from one; the series belongs to them, not to the platform.
+  orderNo String
 
   leadId String? @unique
   lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull, onUpdate: Cascade)
@@ -340,6 +466,8 @@ model Order {
 
   payments Payment[]
 
+  @@unique([orgId, orderNo])
+  @@index([orgId])
   @@index([salesmanId])
   @@index([creId])
   @@index([stage])
@@ -348,6 +476,10 @@ model Order {
 
 model Payment {
   id      String @id @default(cuid())
+
+  orgId String
+  org   Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   orderId String
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
@@ -364,6 +496,7 @@ model Payment {
 
   createdAt DateTime @default(now())
 
+  @@index([orgId])
   @@index([orderId])
   @@index([receivedAt])
 }
@@ -385,9 +518,13 @@ model Payment {
 model Quotation {
   id String @id @default(cuid())
 
+  orgId String
+  org   Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+
   /// Human-readable running number, e.g. REF-020. Continues the series the
   /// old Apps Script system was using.
-  quoteNo String          @unique
+  quoteNo String
   status  QuotationStatus @default(DRAFT)
 
   /// Null for a walk-in quoted without a lead behind it.
@@ -467,6 +604,8 @@ model Quotation {
   revisions QuotationRevision[]
   order     Order?
 
+  @@unique([orgId, quoteNo])
+  @@index([orgId])
   @@index([creId])
   @@index([salesmanId])
   @@index([leadId])
@@ -483,6 +622,10 @@ model Quotation {
 /// stores the whole document plus a written summary of what moved.
 model QuotationRevision {
   id          String    @id @default(cuid())
+
+  orgId String
+  org   Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   quotationId String
   quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
@@ -507,6 +650,7 @@ model QuotationRevision {
 
   createdAt DateTime @default(now())
 
+  @@index([orgId])
   @@unique([quotationId, revision])
   @@index([quotationId, createdAt])
 }
@@ -515,6 +659,10 @@ model QuotationRevision {
 /// which is the whole point: the old panel-picker modals are gone.
 model QuotationItem {
   id          String    @id @default(cuid())
+
+  orgId String
+  org   Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   quotationId String
   quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
@@ -551,6 +699,7 @@ model QuotationItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([orgId])
   @@unique([quotationId, position])
   @@index([quotationId])
 }
@@ -563,7 +712,12 @@ model QuotationItem {
 /// that enforces the hard 5-minute rate limit, plus an in-flight lock so two
 /// overlapping cron hits cannot both call the provider.
 model SyncState {
-  key           String    @id
+  orgId String
+  org   Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// The job name, e.g. "indiamart". Unique per organisation, because each
+  /// one polls with its own credentials on its own five-minute clock.
+  key           String
   lastRunAt     DateTime?
   lastSuccessAt DateTime?
   lockedAt      DateTime?
@@ -573,12 +727,18 @@ model SyncState {
   created       Int       @default(0)
   duplicates    Int       @default(0)
   updatedAt     DateTime  @updatedAt
+
+  @@id([orgId, key])
 }
 
 /// Append-only trail. User deletions and work transfers write here, so there
 /// is always a record of where a deleted user's leads and orders went.
 model AuditEvent {
   id     String @id @default(cuid())
+
+  orgId String
+  org   Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   action String
   detail String
 
@@ -590,6 +750,7 @@ model AuditEvent {
 
   createdAt DateTime @default(now())
 
+  @@index([orgId])
   @@index([createdAt])
   @@index([targetType, targetId])
 }

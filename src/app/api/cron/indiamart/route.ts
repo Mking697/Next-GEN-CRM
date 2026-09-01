@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { env, isCronEnabled } from "@/lib/env";
 import { secretsMatch } from "@/lib/session";
 import { syncIndiamart } from "@/server/ingest/indiamart";
+import { integrationOrgId } from "@/server/ingest/common";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -37,7 +38,19 @@ async function run(request: Request) {
     return NextResponse.json({ ok: false, error: "Unauthorised" }, { status: 401 });
   }
 
-  const result = await syncIndiamart();
+  const orgId = await integrationOrgId();
+  if (!orgId) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "INTEGRATIONS_ORG_SLUG does not name an active workspace, so there is nowhere to put these leads.",
+      },
+      { status: 503 },
+    );
+  }
+
+  const result = await syncIndiamart(orgId);
 
   const status =
     result.status === "ok"

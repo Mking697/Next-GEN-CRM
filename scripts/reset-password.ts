@@ -37,12 +37,13 @@ function fail(message: string): never {
 }
 
 async function main(): Promise<void> {
-  const [emailArg, passwordArg] = process.argv.slice(2);
+  const [emailArg, passwordArg, workspaceArg] = process.argv.slice(2);
 
   if (!emailArg) {
     fail(
-      "Usage: npm run reset-password -- <email> [new-password]\n" +
-        "  Leave the password out and a strong one is generated and printed.",
+      "Usage: npm run reset-password -- <email> [new-password] [workspace-slug]\n" +
+        "  Leave the password out and a strong one is generated and printed.\n" +
+        "  The workspace is only needed when one email signs into more than one.",
     );
   }
 
@@ -72,11 +73,44 @@ async function main(): Promise<void> {
   const prisma = new PrismaClient({ adapter });
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true, name: true, email: true, role: true, isActive: true },
+    // An email is unique within a workspace, not across them, so this can
+    // legitimately match more than one account.
+    const candidates = await prisma.user.findMany({
+      where: {
+        email,
+        ...(workspaceArg ? { org: { slug: workspaceArg.toLowerCase() } } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        orgId: true,
+        org: { select: { slug: true, name: true } },
+      },
     });
-    if (!user) fail(`No account found for ${email}.`);
+
+    if (candidates.length === 0) {
+      fail(
+        workspaceArg
+          ? `No account found for ${email} in the ${workspaceArg} workspace.`
+          : `No account found for ${email}.`,
+      );
+    }
+    if (candidates.length > 1) {
+      // Resetting the wrong person's password is not recoverable by guessing
+      // better, so this refuses rather than picking one.
+      const list = candidates
+        .map((c) => `    ${c.org.slug}  (${c.org.name})`)
+        .join("\n");
+      fail(
+        `${email} exists in more than one workspace:\n${list}\n` +
+          "  Name the one you meant as the third argument.",
+      );
+    }
+
+    const user = candidates[0]!;
 
     const passwordHash = await hashPasswordWith(authSecret, password);
 
@@ -88,6 +122,7 @@ async function main(): Promise<void> {
       prisma.session.deleteMany({ where: { userId: user.id } }),
       prisma.auditEvent.create({
         data: {
+          orgId: user.orgId,
           action: "user.password.reset",
           // Null actor: this was run from a shell, not by a signed-in user.
           // The trail says so rather than crediting it to somebody.
@@ -102,6 +137,7 @@ async function main(): Promise<void> {
     ]);
 
     console.log(`\n  Reset the password for ${user.name} <${user.email}>`);
+    console.log(`  Workspace       ${user.org.name} (${user.org.slug})`);
     console.log(`  Role            ${user.role}`);
     console.log(`  Sessions ended  ${sessions.count}`);
     if (!user.isActive) {

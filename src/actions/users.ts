@@ -218,7 +218,18 @@ export async function runIndiamartSyncAction(
     const { requireAuth } = await import("@/lib/auth");
     await requireAuth("integration.sync.run");
 
-    const result = await syncIndiamart();
+    // The credentials are global, so they belong to one named workspace.
+    // Anyone else pressing this gets an honest refusal rather than somebody
+    // else's enquiries.
+    const { integrationOrgId } = await import("@/server/ingest/common");
+    const orgId = await integrationOrgId();
+    if (!orgId) {
+      return fail(
+        "No workspace is set up to receive IndiaMART leads. Set INTEGRATIONS_ORG_SLUG.",
+        "VALIDATION",
+      );
+    }
+    const result = await syncIndiamart(orgId);
     revalidatePath("/sources");
     revalidatePath("/pool");
 

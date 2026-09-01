@@ -10,12 +10,12 @@ export const metadata: Metadata = { title: "Sign in" };
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; workspace?: string }>;
 }) {
   const user = await currentUser();
   if (user) redirect("/overview");
 
-  const { next } = await searchParams;
+  const { next, workspace } = await searchParams;
   const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : undefined;
 
   return (
@@ -50,6 +50,20 @@ export default async function LoginPage({
                 type="password"
                 autoComplete="current-password"
                 required
+              />
+            </Field>
+            {/* Almost nobody needs this. One email address belongs to one
+                workspace for most people, and leaving it blank finds it. It
+                only earns its place when the same address signs into two. */}
+            <Field
+              label="Workspace"
+              hint="Only if you use this email in more than one company."
+            >
+              <Input
+                name="workspace"
+                autoComplete="organization"
+                defaultValue={workspace ?? ""}
+                placeholder="optional"
               />
             </Field>
           </ActionForm>

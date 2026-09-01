@@ -105,6 +105,7 @@ export interface MetaIngestResult {
 }
 
 export async function handleMetaWebhook(
+  orgId: string,
   payload: unknown,
 ): Promise<MetaIngestResult> {
   const counts = emptyTally();
@@ -124,6 +125,7 @@ export async function handleMetaWebhook(
       try {
         const lead = await fetchLead(leadgenId);
         const result = await ingestLead({
+          orgId,
           source: "META",
           externalId: leadgenId,
           personName: lead.personName,

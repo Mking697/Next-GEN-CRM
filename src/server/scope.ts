@@ -58,7 +58,7 @@ function actingSalesmanId(user: SessionUser): string | null {
  * safe default but was the one fail-open branch in this file: any scope it
  * did not recognise fell straight through to the whole pool.
  */
-export function poolWhere(user: SessionUser): Prisma.LeadWhereInput {
+function poolWhereUnscoped(user: SessionUser): Prisma.LeadWhereInput {
   switch (scopeOf(user, "pool")) {
     case "ALL":
       return { ownerId: null };
@@ -79,7 +79,7 @@ export function poolWhere(user: SessionUser): Prisma.LeadWhereInput {
  * OWN      -> leads this salesman grabbed
  * ASSIGNED -> leads handed to this CRE to quote
  */
-export function leadsWhere(user: SessionUser): Prisma.LeadWhereInput {
+function leadsWhereUnscoped(user: SessionUser): Prisma.LeadWhereInput {
   switch (scopeOf(user, "leads")) {
     case "ALL":
       return { ownerId: { not: null } };
@@ -130,7 +130,7 @@ function ownedLeadsWhere(
  * Unlike leadsWhere, ALL here really is everything, pool included: a lead
  * visible on the pool page has to open.
  */
-export function leadReadableWhere(user: SessionUser): Prisma.LeadWhereInput {
+function leadReadableWhereUnscoped(user: SessionUser): Prisma.LeadWhereInput {
   const owned = ownedLeadsWhere(user);
   if (owned === "EVERYTHING") return {};
 
@@ -147,7 +147,7 @@ export function leadReadableWhere(user: SessionUser): Prisma.LeadWhereInput {
  * never edits the lead itself: the customer details they need live on the
  * quotation, which is theirs.
  */
-export function leadWritableWhere(user: SessionUser): Prisma.LeadWhereInput {
+function leadWritableWhereUnscoped(user: SessionUser): Prisma.LeadWhereInput {
   switch (scopeOf(user, "leads")) {
     case "ALL":
       return {};
@@ -170,7 +170,7 @@ export function leadWritableWhere(user: SessionUser): Prisma.LeadWhereInput {
  *         their own CREs quoted standalone
  * OWN  -> a CRE sees what they built
  */
-export function quotationsWhere(user: SessionUser): Prisma.QuotationWhereInput {
+function quotationsWhereUnscoped(user: SessionUser): Prisma.QuotationWhereInput {
   switch (scopeOf(user, "quotations")) {
     case "ALL":
       return {};
@@ -198,7 +198,7 @@ export function quotationsWhere(user: SessionUser): Prisma.QuotationWhereInput {
  * salesman owns the customer relationship and has to be able to correct a
  * quotation raised in their own name.
  */
-export function quotationWritableWhere(
+function quotationWritableWhereUnscoped(
   user: SessionUser,
 ): Prisma.QuotationWhereInput {
   switch (scopeOf(user, "quotations")) {
@@ -234,7 +234,7 @@ export function quotationWritableWhere(
  * moved them the quotation it came from. Both collections now answer the
  * question the same way.
  */
-export function ordersWhere(user: SessionUser): Prisma.OrderWhereInput {
+function ordersWhereUnscoped(user: SessionUser): Prisma.OrderWhereInput {
   switch (scopeOf(user, "orders")) {
     case "ALL":
       return {};
@@ -266,7 +266,7 @@ export function ordersWhere(user: SessionUser): Prisma.OrderWhereInput {
  * currently selected one for a CRE - see actingSalesmanId(), which says that
  * without this file having to know what a role is.
  */
-export function companiesWhere(user: SessionUser): Prisma.CompanyWhereInput {
+function companiesWhereUnscoped(user: SessionUser): Prisma.CompanyWhereInput {
   switch (scopeOf(user, "clients")) {
     case "ALL":
       return {};
@@ -289,7 +289,7 @@ export function companiesWhere(user: SessionUser): Prisma.CompanyWhereInput {
 // ---------------------------------------------------------------------------
 
 /** Who appears in this people list. */
-export function usersWhere(user: SessionUser): Prisma.UserWhereInput {
+function usersWhereUnscoped(user: SessionUser): Prisma.UserWhereInput {
   switch (scopeOf(user, "users")) {
     case "ALL":
       return {};
@@ -310,7 +310,7 @@ export function usersWhere(user: SessionUser): Prisma.UserWhereInput {
 // ---------------------------------------------------------------------------
 
 /** Which salesmen this user is allowed to see rows for on the Overview. */
-export function overviewSalesmanWhere(user: SessionUser): Prisma.UserWhereInput {
+function overviewSalesmanWhereUnscoped(user: SessionUser): Prisma.UserWhereInput {
   switch (scopeOf(user, "overview")) {
     case "ALL":
       return { role: "SALESMAN" };
@@ -323,4 +323,70 @@ export function overviewSalesmanWhere(user: SessionUser): Prisma.UserWhereInput 
     case "NONE":
       return MATCH_NOTHING;
   }
+}
+
+// ---------------------------------------------------------------------------
+// The tenant boundary
+// ---------------------------------------------------------------------------
+
+/**
+ * Every clause above describes what one PERSON may see. This is what narrows
+ * it to what their ORGANISATION may see, and the two are deliberately
+ * separate concerns.
+ *
+ * It is applied here, at the boundary, rather than inside each switch. A
+ * builder written next year cannot forget the organisation, because forgetting
+ * it is not something an individual builder is able to do - the only way out
+ * of this file is through one of the wrappers below.
+ *
+ * `{ orgId, ...clause }` and not the other way round: spreading the clause
+ * second would let a clause carrying its own orgId overwrite the session's,
+ * which is precisely the mistake this exists to make impossible.
+ */
+function inOrg<T extends object>(
+  user: SessionUser,
+  clause: T,
+): T & { orgId: string } {
+  return { ...clause, orgId: user.orgId };
+}
+
+
+export function poolWhere(user: SessionUser): Prisma.LeadWhereInput {
+  return inOrg(user, poolWhereUnscoped(user));
+}
+
+export function leadsWhere(user: SessionUser): Prisma.LeadWhereInput {
+  return inOrg(user, leadsWhereUnscoped(user));
+}
+
+export function leadReadableWhere(user: SessionUser): Prisma.LeadWhereInput {
+  return inOrg(user, leadReadableWhereUnscoped(user));
+}
+
+export function leadWritableWhere(user: SessionUser): Prisma.LeadWhereInput {
+  return inOrg(user, leadWritableWhereUnscoped(user));
+}
+
+export function quotationsWhere(user: SessionUser): Prisma.QuotationWhereInput {
+  return inOrg(user, quotationsWhereUnscoped(user));
+}
+
+export function quotationWritableWhere(user: SessionUser): Prisma.QuotationWhereInput {
+  return inOrg(user, quotationWritableWhereUnscoped(user));
+}
+
+export function ordersWhere(user: SessionUser): Prisma.OrderWhereInput {
+  return inOrg(user, ordersWhereUnscoped(user));
+}
+
+export function companiesWhere(user: SessionUser): Prisma.CompanyWhereInput {
+  return inOrg(user, companiesWhereUnscoped(user));
+}
+
+export function usersWhere(user: SessionUser): Prisma.UserWhereInput {
+  return inOrg(user, usersWhereUnscoped(user));
+}
+
+export function overviewSalesmanWhere(user: SessionUser): Prisma.UserWhereInput {
+  return inOrg(user, overviewSalesmanWhereUnscoped(user));
 }

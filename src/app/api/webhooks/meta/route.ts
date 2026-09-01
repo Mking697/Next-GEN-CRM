@@ -5,6 +5,7 @@ import {
   verifyHandshake,
   verifyMetaSignature,
 } from "@/server/ingest/meta";
+import { integrationOrgId } from "@/server/ingest/common";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -62,7 +63,14 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await handleMetaWebhook(payload);
+    const orgId = await integrationOrgId();
+    if (!orgId) {
+      // Signed and valid, but there is no workspace to file it under. 200 so
+      // Meta stops retrying something a redelivery cannot fix.
+      return NextResponse.json({ ok: true, ignored: "no workspace configured" });
+    }
+
+    const result = await handleMetaWebhook(orgId, payload);
     return NextResponse.json({
       ok: true,
       fetched: result.tally.fetched,

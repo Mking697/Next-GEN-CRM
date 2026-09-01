@@ -7,6 +7,7 @@ import {
   linkCre,
   makeLead,
   makeOrder,
+  makeOrg,
   makeUser,
   resetDatabase,
   sessionFor,
@@ -30,18 +31,24 @@ describe("deleteUser", { skip: skipWithoutDb }, () => {
     assert.ok(TEST_DB);
     await assertSchema();
   });
-  beforeEach(resetDatabase);
+  // A fresh organisation per test. Every row in the schema names one now,
+  // so there is no such thing as a fixture that belongs to nobody.
+  let org: { id: string };
+  beforeEach(async () => {
+    await resetDatabase();
+    org = await makeOrg();
+  });
   after(disconnect);
 
   test("deleting a salesman moves leads, orders and CREs to the named one", async () => {
-    const admin = await makeUser("ADMIN");
-    const leaving = await makeUser("SALESMAN");
-    const receiving = await makeUser("SALESMAN");
-    const cre = await makeUser("CRE");
-    await linkCre(cre.id, leaving.id);
+    const admin = await makeUser(org.id, "ADMIN");
+    const leaving = await makeUser(org.id, "SALESMAN");
+    const receiving = await makeUser(org.id, "SALESMAN");
+    const cre = await makeUser(org.id, "CRE");
+    await linkCre(org.id, cre.id, leaving.id);
 
-    const lead = await makeLead({ ownerId: leaving.id });
-    const order = await makeOrder(leaving.id, 50_000, { creId: cre.id });
+    const lead = await makeLead(org.id, { ownerId: leaving.id });
+    const order = await makeOrder(org.id, leaving.id, 50_000, { creId: cre.id });
 
     await deleteUser(await sessionFor(admin.id), leaving.id, {
       transferToId: receiving.id,
@@ -67,12 +74,12 @@ describe("deleteUser", { skip: skipWithoutDb }, () => {
   });
 
   test("stage is preserved verbatim, not normalised", async () => {
-    const admin = await makeUser("ADMIN");
-    const leaving = await makeUser("SALESMAN");
-    const receiving = await makeUser("SALESMAN");
-    const cre = await makeUser("CRE");
-    await linkCre(cre.id, leaving.id);
-    const order = await makeOrder(leaving.id, 50_000, { creId: cre.id });
+    const admin = await makeUser(org.id, "ADMIN");
+    const leaving = await makeUser(org.id, "SALESMAN");
+    const receiving = await makeUser(org.id, "SALESMAN");
+    const cre = await makeUser(org.id, "CRE");
+    await linkCre(org.id, cre.id, leaving.id);
+    const order = await makeOrder(org.id, leaving.id, 50_000, { creId: cre.id });
 
     await deleteUser(await sessionFor(admin.id), leaving.id, {
       transferToId: receiving.id,
@@ -87,11 +94,11 @@ describe("deleteUser", { skip: skipWithoutDb }, () => {
   });
 
   test("deleting a CRE frees their orders without moving the salesman", async () => {
-    const admin = await makeUser("ADMIN");
-    const salesman = await makeUser("SALESMAN");
-    const cre = await makeUser("CRE");
-    await linkCre(cre.id, salesman.id);
-    const order = await makeOrder(salesman.id, 50_000, { creId: cre.id });
+    const admin = await makeUser(org.id, "ADMIN");
+    const salesman = await makeUser(org.id, "SALESMAN");
+    const cre = await makeUser(org.id, "CRE");
+    await linkCre(org.id, cre.id, salesman.id);
+    const order = await makeOrder(org.id, salesman.id, 50_000, { creId: cre.id });
 
     await deleteUser(await sessionFor(admin.id), cre.id);
 
@@ -105,9 +112,9 @@ describe("deleteUser", { skip: skipWithoutDb }, () => {
   });
 
   test("a salesman holding work cannot be deleted without naming a destination", async () => {
-    const admin = await makeUser("ADMIN");
-    const leaving = await makeUser("SALESMAN");
-    const lead = await makeLead({ ownerId: leaving.id });
+    const admin = await makeUser(org.id, "ADMIN");
+    const leaving = await makeUser(org.id, "SALESMAN");
+    const lead = await makeLead(org.id, { ownerId: leaving.id });
 
     const session = await sessionFor(admin.id);
     await assert.rejects(() => deleteUser(session, leaving.id));
@@ -121,8 +128,8 @@ describe("deleteUser", { skip: skipWithoutDb }, () => {
   });
 
   test("the owner account cannot be deleted", async () => {
-    const owner = await makeUser("OWNER");
-    const admin = await makeUser("ADMIN");
+    const owner = await makeUser(org.id, "OWNER");
+    const admin = await makeUser(org.id, "ADMIN");
 
     const session = await sessionFor(admin.id);
     await assert.rejects(() => deleteUser(session, owner.id));
@@ -130,12 +137,12 @@ describe("deleteUser", { skip: skipWithoutDb }, () => {
   });
 
   test("a payment history survives its salesman being deleted", async () => {
-    const admin = await makeUser("ADMIN");
-    const leaving = await makeUser("SALESMAN");
-    const receiving = await makeUser("SALESMAN");
-    const order = await makeOrder(leaving.id, 50_000);
+    const admin = await makeUser(org.id, "ADMIN");
+    const leaving = await makeUser(org.id, "SALESMAN");
+    const receiving = await makeUser(org.id, "SALESMAN");
+    const order = await makeOrder(org.id, leaving.id, 50_000);
     await prisma.payment.create({
-      data: { orderId: order.id, amountPaise: 20_000n, mode: "UPI" },
+      data: { orgId: org.id, orderId: order.id, amountPaise: 20_000n, mode: "UPI" },
     });
 
     await deleteUser(await sessionFor(admin.id), leaving.id, {
@@ -148,10 +155,10 @@ describe("deleteUser", { skip: skipWithoutDb }, () => {
   });
 
   test("every deletion writes an audit row inside the same transaction", async () => {
-    const admin = await makeUser("ADMIN");
-    const leaving = await makeUser("SALESMAN");
-    const receiving = await makeUser("SALESMAN");
-    await makeLead({ ownerId: leaving.id });
+    const admin = await makeUser(org.id, "ADMIN");
+    const leaving = await makeUser(org.id, "SALESMAN");
+    const receiving = await makeUser(org.id, "SALESMAN");
+    await makeLead(org.id, { ownerId: leaving.id });
 
     await deleteUser(await sessionFor(admin.id), leaving.id, {
       transferToId: receiving.id,
@@ -165,9 +172,9 @@ describe("deleteUser", { skip: skipWithoutDb }, () => {
   });
 
   test("a refused deletion leaves no audit row behind", async () => {
-    const admin = await makeUser("ADMIN");
-    const leaving = await makeUser("SALESMAN");
-    await makeLead({ ownerId: leaving.id });
+    const admin = await makeUser(org.id, "ADMIN");
+    const leaving = await makeUser(org.id, "SALESMAN");
+    await makeLead(org.id, { ownerId: leaving.id });
 
     const session = await sessionFor(admin.id);
     await assert.rejects(() => deleteUser(session, leaving.id));
@@ -180,13 +187,13 @@ describe("deleteUser", { skip: skipWithoutDb }, () => {
   });
 
   test("previewDeletion counts what deleteUser would actually move", async () => {
-    const admin = await makeUser("ADMIN");
-    const leaving = await makeUser("SALESMAN");
-    const cre = await makeUser("CRE");
-    await linkCre(cre.id, leaving.id);
-    await makeLead({ ownerId: leaving.id });
-    await makeLead({ ownerId: leaving.id });
-    await makeOrder(leaving.id, 10_000);
+    const admin = await makeUser(org.id, "ADMIN");
+    const leaving = await makeUser(org.id, "SALESMAN");
+    const cre = await makeUser(org.id, "CRE");
+    await linkCre(org.id, cre.id, leaving.id);
+    await makeLead(org.id, { ownerId: leaving.id });
+    await makeLead(org.id, { ownerId: leaving.id });
+    await makeOrder(org.id, leaving.id, 10_000);
 
     const preview = await previewDeletion(await sessionFor(admin.id), leaving.id);
 

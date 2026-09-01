@@ -5,6 +5,7 @@ import {
   assertSchema,
   disconnect,
   makeLead,
+  makeOrg,
   makeUser,
   resetDatabase,
   sessionFor,
@@ -27,13 +28,19 @@ describe("grabLead, under contention", { skip: skipWithoutDb }, () => {
     assert.ok(TEST_DB);
     await assertSchema();
   });
-  beforeEach(resetDatabase);
+  // A fresh organisation per test. Every row in the schema names one now,
+  // so there is no such thing as a fixture that belongs to nobody.
+  let org: { id: string };
+  beforeEach(async () => {
+    await resetDatabase();
+    org = await makeOrg();
+  });
   after(disconnect);
 
   test("two salesmen grabbing at the same instant: exactly one wins", async () => {
-    const [a, b] = await Promise.all([makeUser("SALESMAN"), makeUser("SALESMAN")]);
+    const [a, b] = await Promise.all([makeUser(org.id, "SALESMAN"), makeUser(org.id, "SALESMAN")]);
     const [sessionA, sessionB] = await Promise.all([sessionFor(a.id), sessionFor(b.id)]);
-    const lead = await makeLead();
+    const lead = await makeLead(org.id);
 
     const results = await Promise.allSettled([
       grabLead(sessionA, lead.id),
@@ -53,10 +60,10 @@ describe("grabLead, under contention", { skip: skipWithoutDb }, () => {
 
   test("ten salesmen on one lead still leaves one owner", async () => {
     const users = await Promise.all(
-      Array.from({ length: 10 }, () => makeUser("SALESMAN")),
+      Array.from({ length: 10 }, () => makeUser(org.id, "SALESMAN")),
     );
     const sessions = await Promise.all(users.map((u) => sessionFor(u.id)));
-    const lead = await makeLead();
+    const lead = await makeLead(org.id);
 
     const results = await Promise.allSettled(
       sessions.map((s) => grabLead(s, lead.id)),
@@ -72,9 +79,9 @@ describe("grabLead, under contention", { skip: skipWithoutDb }, () => {
   });
 
   test("an already-owned lead cannot be grabbed away", async () => {
-    const owner = await makeUser("SALESMAN");
-    const other = await makeUser("SALESMAN");
-    const lead = await makeLead({ ownerId: owner.id });
+    const owner = await makeUser(org.id, "SALESMAN");
+    const other = await makeUser(org.id, "SALESMAN");
+    const lead = await makeLead(org.id, { ownerId: owner.id });
 
     const session = await sessionFor(other.id);
     await assert.rejects(() => grabLead(session, lead.id));
@@ -87,9 +94,9 @@ describe("grabLead, under contention", { skip: skipWithoutDb }, () => {
   });
 
   test("the winner gets exactly one GRAB activity, not one per attempt", async () => {
-    const [a, b] = await Promise.all([makeUser("SALESMAN"), makeUser("SALESMAN")]);
+    const [a, b] = await Promise.all([makeUser(org.id, "SALESMAN"), makeUser(org.id, "SALESMAN")]);
     const [sessionA, sessionB] = await Promise.all([sessionFor(a.id), sessionFor(b.id)]);
-    const lead = await makeLead();
+    const lead = await makeLead(org.id);
 
     await Promise.allSettled([
       grabLead(sessionA, lead.id),

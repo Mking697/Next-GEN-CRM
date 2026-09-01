@@ -53,6 +53,19 @@ const schema = z.object({
 
   CRON_SECRET: z.string().default(""),
 
+  /**
+   * The workspace slug that owns the IndiaMART and Meta credentials below.
+   *
+   * Those are still process-wide environment variables, which means they can
+   * only ever belong to ONE organisation - one CRM key fetches one seller's
+   * enquiries. Naming that organisation is the honest way to say so; feeding
+   * one seller's leads into every workspace would be the alternative.
+   *
+   * This goes away when integration credentials move into the database per
+   * organisation, at which point the cron iterates organisations instead.
+   */
+  INTEGRATIONS_ORG_SLUG: z.string().default(""),
+
   INDIAMART_CRM_KEY: z.string().default(""),
   INDIAMART_API_URL: z
     .string()
