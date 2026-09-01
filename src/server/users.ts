@@ -297,7 +297,7 @@ export async function setCreSalesmen(
   requirePermission(actor.role, "user.assign.cre");
 
   const cre = await prisma.user.findFirst({
-    where: { id: creId, role: "CRE" },
+    where: { id: creId, role: "CRE", orgId: actor.orgId },
     select: {
       id: true,
       name: true,
@@ -367,8 +367,10 @@ export async function updateUser(
 ): Promise<void> {
   requirePermission(actor.role, "user.update");
 
-  const target = await prisma.user.findUnique({
-    where: { id: targetId },
+  // Scoped to the actor's organisation: targetId arrives from a form, and
+  // without this an admin could name an account in another workspace.
+  const target = await prisma.user.findFirst({
+    where: { id: targetId, orgId: actor.orgId },
     select: { id: true, name: true, role: true, email: true },
   });
   if (!target) throw new NotFoundError("That account");
@@ -434,8 +436,10 @@ export async function resetPassword(
 ): Promise<void> {
   requirePermission(actor.role, "user.password.reset");
 
-  const target = await prisma.user.findUnique({
-    where: { id: targetId },
+  // Scoped to the actor's organisation: targetId arrives from a form, and
+  // without this an admin could name an account in another workspace.
+  const target = await prisma.user.findFirst({
+    where: { id: targetId, orgId: actor.orgId },
     select: { id: true, name: true, role: true },
   });
   if (!target) throw new NotFoundError("That account");
@@ -480,8 +484,10 @@ export async function setUserActive(
 ): Promise<void> {
   requirePermission(actor.role, "user.delete");
 
-  const target = await prisma.user.findUnique({
-    where: { id: targetId },
+  // Scoped to the actor's organisation: targetId arrives from a form, and
+  // without this an admin could name an account in another workspace.
+  const target = await prisma.user.findFirst({
+    where: { id: targetId, orgId: actor.orgId },
     select: { id: true, name: true, role: true },
   });
   if (!target) throw new NotFoundError("That account");
@@ -536,8 +542,10 @@ export async function previewDeletion(
 ): Promise<DeletionPreview> {
   requirePermission(actor.role, "user.delete");
 
-  const target = await prisma.user.findUnique({
-    where: { id: targetId },
+  // Scoped to the actor's organisation: targetId arrives from a form, and
+  // without this an admin could name an account in another workspace.
+  const target = await prisma.user.findFirst({
+    where: { id: targetId, orgId: actor.orgId },
     select: {
       id: true,
       name: true,
@@ -674,8 +682,10 @@ export async function deleteUser(
   requirePermission(actor.role, "user.delete");
 
   return prisma.$transaction(async (tx) => {
-    const target = await tx.user.findUnique({
-      where: { id: targetId },
+    // Scoped: an id arriving from a form must not be able to name an account
+    // in another organisation.
+    const target = await tx.user.findFirst({
+      where: { id: targetId, orgId: actor.orgId },
       select: {
         id: true,
         name: true,
@@ -709,7 +719,12 @@ export async function deleteUser(
             { transferToId: "Choose a salesman to receive the work" },
           );
         }
-        destination = await requireSalesman(tx, options.transferToId, target.id);
+        destination = await requireSalesman(
+          tx,
+          actor.orgId,
+          options.transferToId,
+          target.id,
+        );
       }
     }
 
@@ -823,6 +838,7 @@ export async function deleteUser(
 
 async function requireSalesman(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  orgId: string,
   salesmanId: string,
   excludeId: string,
 ): Promise<{ id: string; name: string }> {
@@ -831,8 +847,9 @@ async function requireSalesman(
       transferToId: "Choose a different salesman",
     });
   }
+  // Work can only ever be handed to somebody in the same organisation.
   const salesman = await tx.user.findFirst({
-    where: { id: salesmanId, role: "SALESMAN", isActive: true },
+    where: { id: salesmanId, role: "SALESMAN", isActive: true, orgId },
     select: { id: true, name: true },
   });
   if (!salesman) {

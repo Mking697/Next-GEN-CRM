@@ -16,7 +16,14 @@ import {
 import { getLead, grabLead, listLeads, listPool } from "@/server/leads";
 import { getOrder, listOrders, recordPayment } from "@/server/orders";
 import { listQuotations } from "@/server/quotations";
-import { listUsers } from "@/server/users";
+import {
+  deleteUser,
+  listUsers,
+  previewDeletion,
+  resetPassword,
+  setUserActive,
+  updateUser,
+} from "@/server/users";
 import { ingestLead } from "@/server/ingest/common";
 import { prisma } from "@/lib/db";
 
@@ -199,6 +206,92 @@ describe("tenant isolation", { skip: skipWithoutDb }, () => {
     assert.equal(first.outcome, "created");
     assert.notEqual(again.outcome, "created");
     assert.equal(again.leadId, first.leadId);
+  });
+
+  /**
+   * Account management takes an id straight from a form.
+   *
+   * Every one of these was reachable across organisations when multi-tenancy
+   * first went in: the lookups fetched by primary key alone, so an admin who
+   * knew - or guessed - an id could act on somebody else's staff. Resetting a
+   * password that way is a complete account takeover of another company.
+   */
+  describe("an admin cannot reach into another organisation's people", () => {
+    async function adminOfA() {
+      const w = await twoWorlds();
+      const admin = await makeUser(w.orgA.id, "ADMIN");
+      return { ...w, adminA: await sessionFor(admin.id) };
+    }
+
+    test("cannot reset a password", async () => {
+      const { adminA, salesB } = await adminOfA();
+      const before = await prisma.user.findUniqueOrThrow({
+        where: { id: salesB.id },
+        select: { passwordHash: true },
+      });
+
+      await assert.rejects(() => resetPassword(adminA, salesB.id, "a-new-password-12"));
+
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: salesB.id },
+        select: { passwordHash: true },
+      });
+      assert.equal(after.passwordHash, before.passwordHash);
+    });
+
+    test("cannot delete an account", async () => {
+      const { adminA, creB } = await adminOfA();
+
+      await assert.rejects(() => deleteUser(adminA, creB.id));
+
+      assert.equal(await prisma.user.count({ where: { id: creB.id } }), 1);
+    });
+
+    test("cannot deactivate an account", async () => {
+      const { adminA, salesB } = await adminOfA();
+
+      await assert.rejects(() => setUserActive(adminA, salesB.id, false));
+
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: salesB.id },
+        select: { isActive: true },
+      });
+      assert.equal(after.isActive, true);
+    });
+
+    test("cannot rename an account", async () => {
+      const { adminA, salesB } = await adminOfA();
+
+      await assert.rejects(() => updateUser(adminA, salesB.id, { name: "Renamed" }));
+
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: salesB.id },
+        select: { name: true },
+      });
+      assert.notEqual(after.name, "Renamed");
+    });
+
+    test("cannot even preview a deletion", async () => {
+      const { adminA, salesB } = await adminOfA();
+      await assert.rejects(() => previewDeletion(adminA, salesB.id));
+    });
+
+    test("cannot transfer work to a salesman in another organisation", async () => {
+      const { adminA, orgA, salesB } = await adminOfA();
+      const leaving = await makeUser(orgA.id, "SALESMAN");
+      await makeLead(orgA.id, { ownerId: leaving.id });
+
+      // Naming Beta's salesman as the destination must fail, and must leave
+      // Alpha's salesman and their lead exactly where they were.
+      await assert.rejects(() =>
+        deleteUser(adminA, leaving.id, { transferToId: salesB.id }),
+      );
+      assert.equal(await prisma.user.count({ where: { id: leaving.id } }), 1);
+      assert.equal(
+        await prisma.lead.count({ where: { ownerId: leaving.id } }),
+        1,
+      );
+    });
   });
 
   test("a suspended organisation cannot be acted for at all", async () => {

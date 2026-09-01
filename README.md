@@ -266,6 +266,45 @@ Sign-in takes an optional workspace. Leave it blank and the email finds its
 workspace on its own; it is only needed when one address signs into two, and
 the login refuses to guess between them.
 
+### Two backstops, and what each one actually covers
+
+`scope.ts` is the control. These two exist because a control with no
+independent check is a claim.
+
+**Row-level security** (`20260901030000_row_level_security`) covers everything
+that does not come through the application: a psql session, a BI tool, an
+analytics job, a leaked read-only credential. Those connect as a restricted
+role and cannot read past one organisation however the query is written - a
+reader that asks explicitly for another organisation's rows gets none, and one
+that forgets to say who it is gets nothing at all rather than everything.
+
+It deliberately does **not** gate the application's own queries. RLS reads the
+tenant from a connection-level setting, and on a shared pool that can only be
+bound inside a transaction; wrapping every read in one would double the round
+trips on an application tuned to reduce them. The app connects as the table
+owner, and an owner bypasses RLS unless `FORCE ROW LEVEL SECURITY` is set.
+
+The migration documents the restricted role an operator creates once.
+
+**The tenant guard** (`src/lib/tenant-guard.ts`) is the other direction: it
+catches the application forgetting its own filter. It is **off by default**,
+and that is a finding rather than a compromise. Run against this codebase it
+flags about a hundred and ten calls and nearly all are safe - a payment
+aggregate filtered by an orderId whose scope was checked three lines above
+looks identical to a genuinely unscoped one, and no static rule separates them.
+A guard that blocked those would be switched off within a week.
+
+What it is good for is an audit, read once:
+
+```bash
+TENANT_GUARD=warn npm test      # list every unscoped set operation
+TENANT_GUARD=strict npm test    # stop at the first one
+```
+
+Doing exactly that is how the six cross-organisation holes in `server/users.ts`
+were found - including a password reset that would have let one company take
+over another company's owner account. There is a regression test for each.
+
 ### What is still global
 
 IndiaMART and Meta credentials are process-wide environment variables, so they

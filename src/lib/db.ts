@@ -2,6 +2,7 @@ import "server-only";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
 import { env } from "./env";
+import { guardMode, inspect, report } from "./tenant-guard";
 
 /**
  * One PrismaClient for the whole process, talking to Neon over the internet
@@ -43,13 +44,35 @@ function createClient(): PrismaClient {
     allowExitOnIdle: false,
   });
 
-  return new PrismaClient({
+  const base = new PrismaClient({
     adapter,
     log:
       env.NODE_ENV === "development"
         ? [{ emit: "stdout", level: "warn" }, { emit: "stdout", level: "error" }]
         : [{ emit: "stdout", level: "error" }],
   });
+
+  /*
+   * The tenant guard.
+   *
+   * Checked here rather than in each caller, because the callers are exactly
+   * what cannot be trusted to remember. Costs one object inspection per query
+   * and no extra round trip - see lib/tenant-guard.ts for why that matters,
+   * and for what row-level security covers that this does not.
+   */
+  const mode = guardMode();
+  if (mode === "off") return base;
+
+  return base.$extends({
+    query: {
+      $allModels: {
+        $allOperations({ model, operation, args, query }) {
+          report(inspect(model, operation, args), mode);
+          return query(args);
+        },
+      },
+    },
+  }) as unknown as PrismaClient;
 }
 
 function getClient(): PrismaClient {
