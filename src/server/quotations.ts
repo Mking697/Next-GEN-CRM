@@ -1,6 +1,5 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { env } from "@/lib/env";
 import type { Prisma } from "@/generated/prisma/client";
 import type { QuotationStatus } from "@/generated/prisma/enums";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
@@ -87,24 +86,33 @@ const VALID_FOR_DAYS = 15;
  * highest with MAX() over the numeric part for the same reason - a TEXT sort
  * would rank REF-999 above REF-1000 and quietly stop allocating.
  *
- * The starting number comes through lib/env, not from process.env directly.
- * Reading the raw variable here meant one setting in this app skipped the
- * validation and the defaulting every other setting goes through.
+ * Scoped to the organisation, same as `orderNo` - `quoteNo` is only unique
+ * per org (@@unique([orgId, quoteNo])), so an unscoped scan would race every
+ * tenant's quotations against one shared counter and cost a full-table scan
+ * that grows with total platform history instead of one org's own volume.
+ *
+ * `start` is the caller's own `Organisation.quotationNumberStart` - each
+ * organisation continuing a different legacy series is a per-org fact, not a
+ * platform-wide default, so it cannot come from a shared environment variable.
  */
 async function withQuoteNumber<T>(
+  orgId: string,
+  start: number,
   run: (quoteNo: string) => Promise<T>,
 ): Promise<T> {
-  const start = env.QUOTATION_NUMBER_START;
-
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const [row] = await prisma.$queryRaw<{ max: number | null }[]>`
       SELECT MAX(CAST(SUBSTRING("quoteNo" FROM '[0-9]+$') AS INTEGER))::int AS max
       FROM "Quotation"
-      WHERE "quoteNo" ~ '^REF-[0-9]+$'
+      WHERE "orgId" = ${orgId}
+        AND "quoteNo" ~ '^REF-[0-9]+$'
     `;
 
+    // Re-read fresh on every attempt, so a collision against a row that just
+    // committed is reflected here rather than compounded by also adding the
+    // attempt number on top - that used to skip a number under contention.
     const lastNumber = row?.max ?? 0;
-    const next = Math.max(lastNumber + 1, start) + attempt;
+    const next = Math.max(lastNumber + 1, start);
 
     try {
       return await run(`REF-${String(next).padStart(3, "0")}`);
@@ -671,10 +679,11 @@ export async function createQuotation(
       quotationSubject: true,
       quotationNote: true,
       quotationTerms: true,
+      quotationNumberStart: true,
     },
   });
 
-  return withQuoteNumber(async (quoteNo) => {
+  return withQuoteNumber(user.orgId, defaults.quotationNumberStart, async (quoteNo) => {
     const created = await prisma.quotation.create({
       data: {
         orgId: user.orgId,
@@ -1102,7 +1111,7 @@ export async function placeOrderFromQuotation(
     );
   }
 
-  return withOrderNumber(async (orderNo) =>
+  return withOrderNumber(user.orgId, async (orderNo) =>
     prisma.$transaction(async (tx) => {
       // Reuse the client record when the quotation was raised against one;
       // a walk-in creates the company and contact now.

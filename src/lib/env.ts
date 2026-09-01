@@ -79,8 +79,6 @@ const schema = z.object({
   META_VERIFY_TOKEN: z.string().default(""),
   META_PAGE_ACCESS_TOKEN: z.string().default(""),
 
-  QUOTATION_NUMBER_START: z.coerce.number().int().positive().default(20),
-
   META_GRAPH_VERSION: z.string().default("v21.0"),
   META_GRAPH_URL: z.string().url().default("https://graph.facebook.com"),
   META_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),

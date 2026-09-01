@@ -17,7 +17,6 @@ const defaults = {
   DATABASE_URL: "postgresql://test:test@localhost:5432/test",
   DIRECT_DATABASE_URL: "postgresql://test:test@localhost:5432/test",
   AUTH_SECRET: "test-secret-that-is-at-least-32-characters-long",
-  QUOTATION_NUMBER_START: "20",
 };
 
 for (const [key, value] of Object.entries(defaults)) {

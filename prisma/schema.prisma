@@ -425,6 +425,14 @@ model Lead {
   @@index([source])
   @@index([receivedAt])
   @@index([ownerId, receivedAt])
+  // The CRE "my leads" list (scope.ts leadsWhereUnscoped ASSIGNED) filters on
+  // both together - a CRE serving several salesmen narrows creId's leads down
+  // to whichever salesman's book they are currently acting for.
+  @@index([creId, ownerId])
+  // "Leads grabbed this month" on the Overview filters ownerId with a date
+  // range; without this it degrades with a salesman's whole lead history
+  // instead of just the reporting month.
+  @@index([ownerId, grabbedAt])
 }
 
 model LeadActivity {
@@ -562,6 +570,14 @@ model Order {
   @@index([creId])
   @@index([stage])
   @@index([confirmedAt])
+  // "Orders closed this month" on the Overview filters creId with a date
+  // range; without this it degrades with a CRE's whole order history instead
+  // of just the reporting month.
+  @@index([creId, closedAt])
+  // The salesman's own orders list (scope.ts ordersWhereUnscoped TEAM), which
+  // also feeds the Overview - filters orgId and salesmanId together on every
+  // load.
+  @@index([orgId, salesmanId])
 }
 
 model Payment {
@@ -701,6 +717,10 @@ model Quotation {
   @@index([leadId])
   @@index([status])
   @@index([createdAt])
+  // The salesman's own quotations list (scope.ts quotationsWhereUnscoped
+  // TEAM), which also feeds the Overview - filters orgId and salesmanId
+  // together on every load.
+  @@index([orgId, salesmanId])
 }
 
 /// One saved state of a quotation, kept so a rework can be traced.

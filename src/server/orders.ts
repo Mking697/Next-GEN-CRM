@@ -106,7 +106,7 @@ export async function confirmOrder(
     ? (normalizeEmail(contactEmailRaw) ?? contactEmailRaw)
     : null;
 
-  return withOrderNumber(async (orderNo) =>
+  return withOrderNumber(user.orgId, async (orderNo) =>
     prisma.$transaction(async (tx) => {
       const company = await tx.company.create({
         data: {
@@ -186,8 +186,14 @@ export async function confirmOrder(
  *
  * Exported because placing an order from a quotation needs the same allocator,
  * and two allocators would eventually hand out the same number.
+ *
+ * Scoped to the organisation - `orderNo` is only unique per org
+ * (@@unique([orgId, orderNo])), so an unscoped scan would race every tenant's
+ * orders against one shared counter and cost a full-table scan across every
+ * organisation's history instead of just this one's.
  */
 export async function withOrderNumber<T>(
+  orgId: string,
   run: (orderNo: string) => Promise<T>,
 ): Promise<T> {
   const prefix = `ORD-${currentYear()}-`;
@@ -198,12 +204,15 @@ export async function withOrderNumber<T>(
     const [row] = await prisma.$queryRaw<{ max: number | null }[]>`
       SELECT MAX(CAST(SUBSTRING("orderNo" FROM '[0-9]+$') AS INTEGER))::int AS max
       FROM "Order"
-      WHERE "orderNo" LIKE ${`${prefix}%`}
+      WHERE "orgId" = ${orgId}
+        AND "orderNo" LIKE ${`${prefix}%`}
         AND "orderNo" ~ '^ORD-[0-9]{4}-[0-9]+$'
     `;
+    // Re-read fresh on every attempt: a collision against a row that just
+    // committed already shows up here, so adding the attempt number on top
+    // would skip a number rather than avoid one.
     const lastNumber = row?.max ?? 0;
-    const next = lastNumber + 1 + attempt;
-    const orderNo = `${prefix}${String(next).padStart(4, "0")}`;
+    const orderNo = `${prefix}${String(lastNumber + 1).padStart(4, "0")}`;
 
     try {
       return await run(orderNo);
