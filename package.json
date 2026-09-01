@@ -10,11 +10,12 @@
     "build": "prisma generate && next build && node scripts/postbuild.mjs",
     "start": "node .next/standalone/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --conditions=react-server --import ./tests/env-setup.mjs --import tsx --test \"tests/**/*.test.ts\"",
+    "test": "node --conditions=react-server --import ./tests/env-setup.mjs --import tsx --test-concurrency=1 --test \"tests/**/*.test.ts\"",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "seed": "node --import tsx prisma/seed.ts"
+    "seed": "node --import tsx prisma/seed.ts",
+    "reset-password": "node --import tsx scripts/reset-password.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^6.16.2",
