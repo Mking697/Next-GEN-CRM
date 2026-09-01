@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 import { ValidationError } from "@/lib/errors";
 import { requirePermission } from "@/lib/permissions";
 import type { SessionUser } from "@/lib/session";
@@ -34,6 +35,9 @@ export interface OrganisationSettings {
   bankBranch: string | null;
   hasLogo: boolean;
   quotationNumberStart: number;
+  quotationSubject: string | null;
+  quotationNote: string | null;
+  quotationTerms: string | null;
 }
 
 export async function getOrganisation(
@@ -61,6 +65,9 @@ export async function getOrganisation(
       bankBranch: true,
       logoMime: true,
       quotationNumberStart: true,
+      quotationSubject: true,
+      quotationNote: true,
+      quotationTerms: true,
     },
   });
 
@@ -91,6 +98,9 @@ export interface OrganisationInput {
   bankIfsc?: string | null;
   bankAccountType?: string | null;
   bankBranch?: string | null;
+  quotationSubject?: string | null;
+  quotationNote?: string | null;
+  quotationTerms?: string | null;
 }
 
 export async function updateOrganisation(
@@ -134,25 +144,45 @@ export async function updateOrganisation(
     );
   }
 
+  /*
+   * Only the fields that were actually sent.
+   *
+   * The Settings page has three separate forms, each posting its own section,
+   * and a field this one does not mention has to be LEFT ALONE. Treating an
+   * absent field as "clear it" meant saving the letterhead silently wiped the
+   * bank account - the customer's next quotation would have told them to pay
+   * into nothing. Undefined means untouched; an empty string still clears.
+   */
+  const data: Prisma.OrganisationUpdateInput = {};
+  const set = <K extends keyof Prisma.OrganisationUpdateInput>(
+    key: K,
+    provided: unknown,
+    value: Prisma.OrganisationUpdateInput[K],
+  ) => {
+    if (provided !== undefined) data[key] = value;
+  };
+
+  if (name) data.name = name;
+  set("legalName", input.legalName, cleanText(input.legalName, 160));
+  set("address", input.address, cleanText(input.address, 400));
+  set("gstin", input.gstin, gstin);
+  set("phone", input.phone, cleanText(input.phone, 40));
+  set("email", input.email, email);
+  set("website", input.website, cleanText(input.website, 200));
+  set("bankBeneficiary", input.bankBeneficiary, cleanText(input.bankBeneficiary, 160));
+  set("bankName", input.bankName, cleanText(input.bankName, 120));
+  set("bankAccount", input.bankAccount, bankAccount?.replace(/\s/g, "") ?? null);
+  set("bankIfsc", input.bankIfsc, bankIfsc);
+  set("bankAccountType", input.bankAccountType, cleanText(input.bankAccountType, 40));
+  set("bankBranch", input.bankBranch, cleanText(input.bankBranch, 120));
+  // Long free text, so cleanText's whitespace collapsing would destroy the
+  // line breaks that make a terms list readable.
+  set("quotationSubject", input.quotationSubject, longText(input.quotationSubject, 500));
+  set("quotationNote", input.quotationNote, longText(input.quotationNote, 2000));
+  set("quotationTerms", input.quotationTerms, longText(input.quotationTerms, 8000));
+
   await prisma.$transaction(async (tx) => {
-    await tx.organisation.update({
-      where: { id: user.orgId },
-      data: {
-        ...(name ? { name } : {}),
-        legalName: cleanText(input.legalName, 160),
-        address: cleanText(input.address, 400),
-        gstin,
-        phone: cleanText(input.phone, 40),
-        email,
-        website: cleanText(input.website, 200),
-        bankBeneficiary: cleanText(input.bankBeneficiary, 160),
-        bankName: cleanText(input.bankName, 120),
-        bankAccount: bankAccount?.replace(/\s/g, "") ?? null,
-        bankIfsc,
-        bankAccountType: cleanText(input.bankAccountType, 40),
-        bankBranch: cleanText(input.bankBranch, 120),
-      },
-    });
+    await tx.organisation.update({ where: { id: user.orgId }, data });
 
     await audit(tx, {
       orgId: user.orgId,
@@ -163,6 +193,19 @@ export async function updateOrganisation(
       detail: `${user.name} changed the company details that print on quotations`,
     });
   });
+}
+
+/**
+ * Free text that has to keep its line breaks.
+ *
+ * cleanText collapses every run of whitespace into one space, which is right
+ * for a name or a city and wrong for nine numbered terms - it would run them
+ * into a single paragraph.
+ */
+function longText(value: string | null | undefined, max: number): string | null {
+  if (!value) return null;
+  const trimmed = value.replace(/\r\n/g, "\n").trim().slice(0, max);
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 // ---------------------------------------------------------------------------

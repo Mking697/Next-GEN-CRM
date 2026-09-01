@@ -4,6 +4,11 @@ import { ConflictError, ValidationError } from "@/lib/errors";
 import { hashPassword, validatePassword } from "@/lib/password";
 import { cleanText, normalizeEmail } from "@/lib/dedupe";
 import { audit } from "./audit";
+import {
+  FALLBACK_NOTE,
+  FALLBACK_SUBJECT,
+  FALLBACK_TERMS,
+} from "./quotations";
 
 /**
  * A company signing itself up.
@@ -121,6 +126,13 @@ export async function signUp(input: SignupInput): Promise<SignupResult> {
           // Sensible starting points a company can change in Settings.
           legalName: companyName,
           bankBeneficiary: companyName,
+          // Their quotations say something from the first one, rather than
+          // presenting an empty terms box nobody wants to write from scratch.
+          // Generic on purpose - the one about jurisdiction says outright
+          // that it needs replacing.
+          quotationSubject: FALLBACK_SUBJECT,
+          quotationNote: FALLBACK_NOTE,
+          quotationTerms: FALLBACK_TERMS,
         },
         select: { id: true, slug: true },
       });

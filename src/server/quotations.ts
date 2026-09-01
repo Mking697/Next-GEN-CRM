@@ -34,13 +34,33 @@ const PAGE_SIZE = 25;
  * Apps Script system so the documents customers receive do not suddenly read
  * differently. Every one of these is editable per quotation.
  */
-export const DEFAULT_SUBJECT =
-  "Supply and installation of PUF/PIR insulated panels as per specifications below:";
+/**
+ * The last resort, for an organisation that has not written its own yet.
+ *
+ * These used to BE the defaults, compiled in and applied to every company:
+ * a subject naming PUF panels and terms fixing the jurisdiction to Delhi.
+ * They now only fill a gap - an organisation's own text in
+ * Organisation.quotationSubject / Note / Terms wins, and Settings is where it
+ * is written. Kept deliberately generic, and the one about jurisdiction says
+ * outright that it needs replacing rather than quietly naming a city the
+ * company has nothing to do with.
+ */
+export const FALLBACK_SUBJECT = "Supply as per the specifications below:";
 
-export const DEFAULT_NOTE =
-  "All panels will be manufactured and supplied as per customer specifications and requirements.";
+export const FALLBACK_NOTE =
+  "Goods will be supplied as per the specifications and requirements confirmed with the customer.";
 
-export const DEFAULT_TERMS = [
+export const FALLBACK_TERMS = [
+  "1. Delivery Period: To be confirmed against a firm order.",
+  "2. Price: The rates above are basic. GST extra as applicable.",
+  "3. Transportation: Charged extra at actuals and billed accordingly.",
+  "4. Payment Terms: To be agreed with the purchase order.",
+  "5. This offer is valid for 15 days from the date of quotation.",
+  "6. Jurisdiction: [set your city in Settings > Your company].",
+].join("\n");
+
+/** The panel-industry wording the first company on this system quoted with. */
+const LEGACY_TERMS = [
   "1. Delivery Period: Within 12-15 Days from Date of Confirmed Order along with advance",
   "2. Price: The above mentioned price is basic. GST 18% extra.",
   "3. Lifting of the material has to be as per the committed date any delay in lifting of material than payment due date will be considered from the date of readiness of the material.",
@@ -380,9 +400,9 @@ export async function getQuotation(
       pincode: row.shippingPincode,
       country: row.shippingCountry,
     },
-    subject: row.subject ?? DEFAULT_SUBJECT,
-    note: row.note ?? DEFAULT_NOTE,
-    terms: row.terms ?? DEFAULT_TERMS,
+    subject: row.subject ?? FALLBACK_SUBJECT,
+    note: row.note ?? FALLBACK_NOTE,
+    terms: row.terms ?? FALLBACK_TERMS,
     totals,
     items,
     // The stored salesman wins; the lead owner is the fallback for rows the
@@ -643,6 +663,17 @@ export async function createQuotation(
     );
   }
 
+  // What this company's quotations start out saying. Written in Settings, and
+  // copied onto the document below rather than referenced from it.
+  const defaults = await prisma.organisation.findUniqueOrThrow({
+    where: { id: user.orgId },
+    select: {
+      quotationSubject: true,
+      quotationNote: true,
+      quotationTerms: true,
+    },
+  });
+
   return withQuoteNumber(async (quoteNo) => {
     const created = await prisma.quotation.create({
       data: {
@@ -655,9 +686,11 @@ export async function createQuotation(
         companyId,
         contactId,
         partyName,
-        subject: DEFAULT_SUBJECT,
-        note: DEFAULT_NOTE,
-        terms: DEFAULT_TERMS,
+        // Copied onto the quotation rather than referenced, so editing the
+        // company default later never rewrites a document already sent.
+        subject: defaults.quotationSubject ?? FALLBACK_SUBJECT,
+        note: defaults.quotationNote ?? FALLBACK_NOTE,
+        terms: defaults.quotationTerms ?? FALLBACK_TERMS,
         validUntil,
         ...seed,
       },

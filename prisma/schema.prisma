@@ -138,6 +138,20 @@ model Organisation {
   /// numbering from an older system is a per-organisation fact.
   quotationNumberStart Int @default(1)
 
+  // -- what a new quotation starts out saying ------------------------------
+  //
+  // These were three constants compiled into server/quotations.ts, written
+  // for one company: a subject naming PUF panels, and terms fixing the
+  // jurisdiction to Delhi. Every company that ever signed up would have
+  // inherited them. Same problem the letterhead had, and the same fix.
+  //
+  // They seed a new quotation and nothing more. The CRE editing that
+  // quotation can change any of it, and doing so never touches these - a
+  // quotation is a document that was sent, and what it said stays with it.
+  quotationSubject String?
+  quotationNote    String?
+  quotationTerms   String?
+
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

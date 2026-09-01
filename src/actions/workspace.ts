@@ -76,6 +76,9 @@ export async function updateWorkspaceAction(
       bankIfsc: optional(formData, "bankIfsc"),
       bankAccountType: optional(formData, "bankAccountType"),
       bankBranch: optional(formData, "bankBranch"),
+      quotationSubject: optional(formData, "quotationSubject"),
+      quotationNote: optional(formData, "quotationNote"),
+      quotationTerms: optional(formData, "quotationTerms"),
     });
 
     refresh();

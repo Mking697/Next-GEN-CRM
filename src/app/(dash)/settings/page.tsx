@@ -37,6 +37,7 @@ export default async function SettingsPage({
     !org.gstin && "GSTIN",
     !org.bankAccount && "bank account",
     !org.hasLogo && "logo",
+    !org.quotationTerms && "terms and conditions",
   ].filter(Boolean) as string[];
 
   return (
@@ -198,15 +199,6 @@ export default async function SettingsPage({
               action={updateWorkspaceAction}
               submitLabel="Save"
               pendingLabel="Saving..."
-              hidden={{
-                name: org.name,
-                legalName: org.legalName ?? "",
-                address: org.address ?? "",
-                gstin: org.gstin ?? "",
-                phone: org.phone ?? "",
-                email: org.email ?? "",
-                website: org.website ?? "",
-              }}
             >
               <Field label="Beneficiary">
                 <Input
@@ -261,6 +253,51 @@ export default async function SettingsPage({
           </Card>
         </div>
       </div>
+
+      {/* -- what a new quotation starts out saying ------------------- */}
+      <Card className="mt-4">
+        <CardHeader
+          title="Quotation defaults"
+          hint="Copied onto every new quotation. The person building one can change any of it before sending - and changing it here never touches a quotation that already exists."
+        />
+        <ActionForm
+          action={updateWorkspaceAction}
+          submitLabel="Save defaults"
+          pendingLabel="Saving..."
+        >
+          <Field
+            label="Subject"
+            hint="The line under the customer's address, saying what the quotation is for."
+          >
+            <Input
+              name="quotationSubject"
+              defaultValue={org.quotationSubject ?? ""}
+              maxLength={500}
+              placeholder="Supply as per the specifications below:"
+            />
+          </Field>
+          <Field label="Note" hint="A short paragraph above the terms.">
+            <Textarea
+              name="quotationNote"
+              defaultValue={org.quotationNote ?? ""}
+              rows={2}
+              maxLength={2000}
+            />
+          </Field>
+          <Field
+            label="Terms and conditions"
+            hint="One per line. Delivery, payment, transport, validity, jurisdiction - whatever your company quotes on."
+          >
+            <Textarea
+              name="quotationTerms"
+              defaultValue={org.quotationTerms ?? ""}
+              rows={12}
+              maxLength={8000}
+              className="font-mono text-sm"
+            />
+          </Field>
+        </ActionForm>
+      </Card>
     </>
   );
 }
