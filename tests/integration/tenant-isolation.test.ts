@@ -294,6 +294,79 @@ describe("tenant isolation", { skip: skipWithoutDb }, () => {
     });
   });
 
+  /**
+   * A platform administrator is not a role on User, and this is what that
+   * buys: the identity that can reach every customer has no way to express
+   * itself inside the CRM's own queries. It supports a customer by holding an
+   * ORDINARY session in their organisation.
+   */
+  describe("platform support happens inside a tenant, not around it", () => {
+    test("an impersonated session is scoped exactly like a normal one", async () => {
+      const { orgA, orgB, salesB, leadB } = await twoWorlds();
+      const ownerA = await makeUser(orgA.id, "OWNER");
+
+      const admin = await prisma.platformAdmin.create({
+        data: {
+          email: `platform-${Date.now()}@test.local`,
+          name: "Platform Admin",
+          passwordHash: "x",
+          mustChangePassword: false,
+        },
+        select: { id: true },
+      });
+
+      // The session an administrator gets when they open Alpha's workspace.
+      await prisma.session.create({
+        data: {
+          tokenHash: `t${Date.now()}`,
+          userId: ownerA.id,
+          expiresAt: new Date(Date.now() + 3_600_000),
+          impersonatedById: admin.id,
+        },
+      });
+
+      // It carries no extra authority: still Alpha, still nothing of Beta's.
+      const support = await sessionFor(ownerA.id);
+      assert.equal(support.orgId, orgA.id);
+      assert.equal(await getLead(support, leadB.id), null);
+
+      const people = await listUsers(support);
+      assert.equal(
+        people.some((p) => p.id === salesB.id),
+        false,
+        "Beta's staff must not appear",
+      );
+    });
+
+    test("the visit is written into the customer's own audit trail", async () => {
+      const { orgA } = await twoWorlds();
+      const admin = await prisma.platformAdmin.create({
+        data: {
+          email: `platform-${Date.now()}-2@test.local`,
+          name: "Platform Admin",
+          passwordHash: "x",
+        },
+        select: { id: true, name: true },
+      });
+
+      await prisma.auditEvent.create({
+        data: {
+          orgId: orgA.id,
+          action: "workspace.impersonate",
+          targetType: "Organisation",
+          targetId: orgA.id,
+          detail: `Platform administrator ${admin.name} opened this workspace`,
+        },
+      });
+
+      // Written where the customer can read it, not only in a log we keep.
+      const events = await prisma.auditEvent.findMany({
+        where: { orgId: orgA.id, action: "workspace.impersonate" },
+      });
+      assert.equal(events.length, 1);
+    });
+  });
+
   test("a suspended organisation cannot be acted for at all", async () => {
     const org = await makeOrg({ isActive: false });
     const salesman = await makeUser(org.id, "SALESMAN");

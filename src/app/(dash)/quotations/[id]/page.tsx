@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import { formatPaise } from "@/lib/money";
-import { BANK, COMPANY } from "@/lib/company";
+import { getLetterhead } from "@/server/letterhead";
 import { formatQtyMilli, type GridRow } from "@/lib/quotation-math";
 import { getQuotation, listItemSuggestions } from "@/server/quotations";
 import { listCresFor } from "@/server/orders";
@@ -41,6 +41,7 @@ export default async function QuotationPage({
   const user = await requireUser(`/quotations/${id}`);
 
   const quotation = await getQuotation(user, id);
+  const { company, bank, logo, isBlank } = await getLetterhead(user.orgId);
   if (!quotation) notFound();
 
   const [revisions, suggestions] = await Promise.all([
@@ -146,19 +147,29 @@ export default async function QuotationPage({
         {/* -- letterhead ------------------------------------------------- */}
         <Card>
           <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4">
-            <div>
-              <h2 className="text-md font-semibold tracking-tight">
-                {COMPANY.name}
-              </h2>
-              <p className="mt-0.5 max-w-xl text-xs text-[var(--text-muted)]">
-                {COMPANY.address}
-              </p>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">
-                Sales person: {quotation.salesmanName ?? "-"} &middot; CRE:{" "}
-                {quotation.creName}
-                {quotation.creMobile ? ` · ${quotation.creMobile}` : ""}
-                {quotation.creEmail ? ` · ${quotation.creEmail}` : ""}
-              </p>
+            <div className="flex items-start gap-3">
+              {logo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={logo}
+                  alt=""
+                  className="h-10 w-auto max-w-[7rem] object-contain"
+                />
+              ) : null}
+              <div>
+                <h2 className="text-md font-semibold tracking-tight">
+                  {company.name}
+                </h2>
+                <p className="mt-0.5 max-w-xl text-xs text-[var(--text-muted)]">
+                  {company.address ?? "No address set - add one in Settings"}
+                </p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                  Sales person: {quotation.salesmanName ?? "-"} &middot; CRE:{" "}
+                  {quotation.creName}
+                  {quotation.creMobile ? ` · ${quotation.creMobile}` : ""}
+                  {quotation.creEmail ? ` · ${quotation.creEmail}` : ""}
+                </p>
+              </div>
             </div>
             <div className="text-right">
               <div className="text-xl font-semibold tracking-tight">
@@ -383,13 +394,19 @@ export default async function QuotationPage({
 
       {/* -- bank ---------------------------------------------------------- */}
       <Card className="mt-4">
-        <CardHeader title={`Beneficiary: ${BANK.beneficiary}`} />
+        <CardHeader
+          title={
+            bank.beneficiary
+              ? `Beneficiary: ${bank.beneficiary}`
+              : "Bank details not set"
+          }
+        />
         <dl className="grid gap-x-6 gap-y-1 text-base sm:grid-cols-2">
-          <Bank label="Bank" value={BANK.name} />
-          <Bank label="Account no." value={BANK.account} />
-          <Bank label="IFSC" value={BANK.ifsc} />
-          <Bank label="Account type" value={BANK.accountType} />
-          <Bank label="Branch" value={BANK.branch} />
+          <Bank label="Bank" value={bank.name ?? "-"} />
+          <Bank label="Account no." value={bank.account ?? "-"} />
+          <Bank label="IFSC" value={bank.ifsc ?? "-"} />
+          <Bank label="Account type" value={bank.accountType ?? "-"} />
+          <Bank label="Branch" value={bank.branch ?? "-"} />
         </dl>
       </Card>
 

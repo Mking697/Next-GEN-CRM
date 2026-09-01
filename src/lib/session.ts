@@ -52,6 +52,14 @@ export interface SessionUser {
   activeSalesmanId: string | null;
   activeSalesmanName: string | null;
   isActive: boolean;
+  /**
+   * Set when a platform administrator opened this workspace to support it.
+   *
+   * The session is otherwise completely ordinary - it carries no extra
+   * authority and reaches nothing outside this organisation. This exists so
+   * every screen can say out loud that somebody is in here.
+   */
+  impersonatedBy: { name: string; email: string } | null;
 }
 
 /** The cookie carrying which salesman a CRE is currently acting for. */
@@ -131,6 +139,7 @@ export async function readSession(): Promise<SessionUser | null> {
     select: {
       id: true,
       expiresAt: true,
+      impersonatedBy: { select: { name: true, email: true } },
       user: {
         select: {
           id: true,
@@ -183,6 +192,7 @@ export async function readSession(): Promise<SessionUser | null> {
     activeSalesmanId: active?.id ?? null,
     activeSalesmanName: active?.name ?? null,
     isActive: session.user.isActive,
+    impersonatedBy: session.impersonatedBy,
   };
 }
 

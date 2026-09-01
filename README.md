@@ -62,6 +62,7 @@ the owner creates admins, admins create salesmen and CREs.
 | `npm run typecheck` | `tsc --noEmit`, tests included |
 | `npm test` | The test suite, on Node's built-in runner |
 | `npm run reset-password` | Break glass: reset any account's password from the shell |
+| `npm run platform-admin` | Create or reset the account that runs the platform |
 
 ---
 
@@ -265,6 +266,55 @@ password.
 Sign-in takes an optional workspace. Leave it blank and the email finds its
 workspace on its own; it is only needed when one address signs into two, and
 the login refuses to guess between them.
+
+### Signing up, and the letterhead
+
+A company signs itself up at `/signup` - five fields, and none of them is an
+address or a bank account. Everything the letterhead needs is asked for on
+Settings instead, once they are inside and can see what it is for; eleven
+fields before seeing the product is how a signup form gets abandoned.
+
+The letterhead used to be seven environment variables, which could only ever
+describe one company. It now belongs to the organisation: name, address,
+GSTIN, bank account and logo, read fresh every time a quotation is rendered.
+A field left blank prints as blank, never as a placeholder that looks like a
+value - Settings is where the nagging belongs, and it does nag.
+
+The logo is stored as bytes, not as a link. A quotation goes out and is kept;
+pointing at an image host means the day that host moves the file, every
+document ever sent renders with a hole in it.
+
+GSTIN, IFSC and account number are format-checked before saving. A wrong IFSC
+does not fail loudly - it prints, the customer pays into nowhere, and somebody
+finds out a week later.
+
+### Whoever runs the software
+
+`/admin`, behind a `PlatformAdmin` account created by `npm run platform-admin`.
+There is no route that creates one, so it takes the database credentials -
+which is the right bar for an identity that can reach every customer.
+
+Deliberately **not** a role on `User`. The isolation everything else rests on
+is that a user belongs to one organisation and no branch anywhere can turn
+that filter off. A superadmin role would put the branch back, and every query
+written afterwards would depend on nobody reaching it by accident. So it is a
+separate identity with a separate session table, and it reaches customer data
+by two explicit routes only:
+
+- **The console** lists workspaces and can suspend one. Its query is called
+  `listAllWorkspaces`, so crossing organisations is visible at the call site.
+- **Opening a workspace** issues an *ordinary* session as that company's
+  owner - same scope clauses, same permissions, an hour long. Support happens
+  inside a tenant rather than through a hole in the boundary, so a bug in the
+  CRM can never widen it.
+
+Every visit puts a banner on every screen and a row in **that company's own
+audit trail**, where the customer can read it. Nothing in `server/scope.ts`
+knows any of this exists, which is the point.
+
+A seeded account starts with `mustChangePassword`, and the console refuses to
+do anything until it is changed: whatever password it was created with has by
+then been in a shell history.
 
 ### Two backstops, and what each one actually covers
 

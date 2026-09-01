@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { loginAction } from "@/actions/auth";
@@ -70,8 +71,12 @@ export default async function LoginPage({
         </div>
 
         <p className="mt-5 text-sm leading-relaxed text-[var(--text-faint)]">
-          There is no sign-up. Every account is created by an admin, and the
-          first one comes from the seed script.
+          Your admin creates your account. If you are setting up a company for
+          the first time,{" "}
+          <Link href="/signup" className="text-[var(--accent-text)] hover:underline">
+            start a workspace
+          </Link>
+          .
         </p>
       </div>
     </main>

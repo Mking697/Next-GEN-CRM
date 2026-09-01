@@ -46,6 +46,7 @@ export const PERMISSION_GROUPS = [
   { id: "people", title: "People and accounts" },
   { id: "reporting", title: "Overview and reporting" },
   { id: "integrations", title: "Lead sources" },
+  { id: "workspace", title: "Your company" },
 ] as const;
 
 export type GroupId = (typeof PERMISSION_GROUPS)[number]["id"];
@@ -400,6 +401,22 @@ export const PERMISSIONS = {
     title: "Read the audit trail",
     detail:
       "Every account deletion and every bulk transfer of work, with who did it and where the leads and orders went.",
+    roles: MANAGEMENT,
+  },
+
+  // -- the workspace itself --------------------------------------------------
+  "workspace.view": {
+    group: "workspace",
+    title: "See your company details",
+    detail:
+      "The name, address, GSTIN, logo and bank account that print on every quotation your company sends.",
+    roles: ALL_ROLES,
+  },
+  "workspace.edit": {
+    group: "workspace",
+    title: "Change your company details and logo",
+    detail:
+      "What a customer reads at the top of a quotation, and the account they pay into. Changing it changes every quotation printed afterwards, but not the ones already sent - those carry their own snapshot of the customer, and the letterhead is read fresh each time it is rendered.",
     roles: MANAGEMENT,
   },
 

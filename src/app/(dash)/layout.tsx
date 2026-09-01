@@ -31,11 +31,25 @@ export default async function DashboardLayout({
     ...(can(user.role, "integration.view")
       ? [{ href: "/sources", label: "Lead sources" }]
       : []),
+    ...(can(user.role, "workspace.view")
+      ? [{ href: "/settings", label: "Your company" }]
+      : []),
     { href: "/guidebook", label: "Guidebook" },
   ];
 
   return (
     <div className="min-h-dvh lg:pl-60">
+      {/* Somebody who runs this software is inside this company's workspace.
+          Said on every screen, not tucked into a settings page, and written
+          into this workspace's own audit trail as well - the customer is
+          entitled to see that it happened. */}
+      {user.impersonatedBy ? (
+        <div className="sticky top-0 z-30 bg-[var(--warn)] px-4 py-1.5 text-center text-xs font-medium text-black">
+          Support session &mdash; {user.impersonatedBy.name} (
+          {user.impersonatedBy.email}) is signed in to {user.orgName} as{" "}
+          {user.name}. Everything done here is recorded.
+        </div>
+      ) : null}
       <Nav
         items={items}
         user={{

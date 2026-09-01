@@ -37,6 +37,8 @@ export const skipWithoutDb = TEST_DB
  * database behind if a test fails midway.
  */
 const TABLES = [
+  "PlatformSession",
+  "PlatformAdmin",
   "Organisation",
   "AuditEvent",
   "Payment",
@@ -161,6 +163,7 @@ export async function sessionFor(userId: string): Promise<SessionUser> {
     salesmen,
     activeSalesmanId: salesmen[0]?.id ?? null,
     activeSalesmanName: salesmen[0]?.name ?? null,
+    impersonatedBy: null,
   };
 }
 

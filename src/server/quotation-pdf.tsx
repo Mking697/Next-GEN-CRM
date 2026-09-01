@@ -8,7 +8,7 @@ import {
   View,
   renderToBuffer,
 } from "@react-pdf/renderer";
-import { letterhead } from "@/lib/company";
+import type { Letterhead } from "./letterhead";
 import { formatQtyMilli } from "@/lib/quotation-math";
 import type { QuotationDetail } from "./quotations";
 
@@ -203,16 +203,16 @@ function addressLines(address: {
 
 function QuotationDocument({
   quotation,
-  logo,
+  letterhead,
   dateText,
   validText,
 }: {
   quotation: QuotationDetail;
-  logo: string | null;
+  letterhead: Letterhead;
   dateText: string;
   validText: string | null;
 }) {
-  const { company, bank } = letterhead();
+  const { company, bank, logo } = letterhead;
   const { totals } = quotation;
 
   return (
@@ -443,54 +443,17 @@ function QuotationDocument({
 // Logo
 // ---------------------------------------------------------------------------
 
-/**
- * The logo is fetched once and cached for the life of the process.
- *
- * A failure is not allowed to break the PDF: a quotation without a logo is
- * still a valid quotation, whereas a 500 because an image host was slow is
- * not something a CRE can do anything about.
- */
-let logoCache: { value: string | null } | null = null;
-
-async function loadLogo(): Promise<string | null> {
-  if (logoCache) return logoCache.value;
-
-  const url = letterhead().company.logoUrl;
-  if (!url) {
-    logoCache = { value: null };
-    return null;
-  }
-
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeout);
-
-    if (!response.ok) throw new Error(`logo responded ${response.status}`);
-
-    const type = response.headers.get("content-type") ?? "image/png";
-    const buffer = Buffer.from(await response.arrayBuffer());
-    logoCache = { value: `data:${type};base64,${buffer.toString("base64")}` };
-  } catch (error) {
-    console.warn("[pdf] logo unavailable, rendering without it:", error);
-    logoCache = { value: null };
-  }
-
-  return logoCache.value;
-}
-
 // ---------------------------------------------------------------------------
 
 export async function renderQuotationPdf(
   quotation: QuotationDetail,
+  letterhead: Letterhead,
   formatted: { dateText: string; validText: string | null },
 ): Promise<Buffer> {
-  const logo = await loadLogo();
   return renderToBuffer(
     <QuotationDocument
       quotation={quotation}
-      logo={logo}
+      letterhead={letterhead}
       dateText={formatted.dateText}
       validText={formatted.validText}
     />,

@@ -4,6 +4,7 @@ import { can } from "@/lib/permissions";
 import { formatDate } from "@/lib/dates";
 import { getQuotation } from "@/server/quotations";
 import { pdfFileName, renderQuotationPdf } from "@/server/quotation-pdf";
+import { getLetterhead } from "@/server/letterhead";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -39,7 +40,11 @@ export async function GET(
   }
 
   try {
-    const pdf = await renderQuotationPdf(quotation, {
+    // The letterhead belongs to the viewer's organisation, which is the same
+    // organisation the quotation was found in - getQuotation is scoped.
+    const letterhead = await getLetterhead(user.orgId);
+
+    const pdf = await renderQuotationPdf(quotation, letterhead, {
       dateText: formatDate(quotation.createdAt),
       validText: quotation.validUntil ? formatDate(quotation.validUntil) : null,
     });

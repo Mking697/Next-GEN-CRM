@@ -257,7 +257,74 @@ model Session {
   userAgent String?
   ip        String?
 
+  /// Set when a platform administrator opened this workspace to support it.
+  ///
+  /// The session is otherwise completely ordinary - same scope clauses, same
+  /// permissions, same organisation. That is the point: support happens
+  /// INSIDE a tenant rather than through a hole in the boundary, so a bug in
+  /// the CRM can never widen it. The banner on screen and the audit row come
+  /// from this column.
+  impersonatedById String?
+  impersonatedBy   PlatformAdmin? @relation(fields: [impersonatedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
   @@index([userId])
+  @@index([expiresAt])
+  @@index([impersonatedById])
+}
+
+// ---------------------------------------------------------------------------
+// The platform
+// ---------------------------------------------------------------------------
+
+/// Whoever runs this software, as opposed to whoever uses it.
+///
+/// Deliberately NOT a Role on User. A User belongs to exactly one
+/// organisation and every query about one is filtered by that, with no branch
+/// anywhere that can turn the filter off - which is the only reason the
+/// isolation is worth believing. Adding a role that skips it would put that
+/// hole back, and every query written afterwards would depend on nobody
+/// reaching it by accident.
+///
+/// So this is a separate identity with a separate session, and it reaches
+/// customer data by two explicit routes only: the platform console, whose
+/// queries say out loud that they read across organisations, and
+/// impersonation, which issues an ordinary scoped session inside one tenant.
+model PlatformAdmin {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String
+  name         String
+  isActive     Boolean @default(true)
+
+  /// Seeded accounts start with a password from the environment, which by
+  /// then has been in a shell history and a config file. This forces it to be
+  /// replaced before the account can do anything.
+  mustChangePassword Boolean @default(true)
+
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  sessions       PlatformSession[]
+  impersonations Session[]
+}
+
+/// A platform administrator's own sign-in, kept apart from Session.
+///
+/// Separate table rather than a nullable column on Session, so that no code
+/// path reading a CRM session can ever be handed a platform one by mistake.
+model PlatformSession {
+  id String @id @default(cuid())
+
+  tokenHash String        @unique
+  adminId   String
+  admin     PlatformAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime      @default(now())
+  userAgent String?
+  ip        String?
+
+  @@index([adminId])
   @@index([expiresAt])
 }
 
