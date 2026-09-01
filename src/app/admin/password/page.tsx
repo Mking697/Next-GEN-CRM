@@ -4,6 +4,7 @@ import { readPlatformSession } from "@/server/platform";
 import { changePlatformPasswordAction } from "@/actions/platform";
 import { ActionForm } from "@/components/form";
 import { Field, Input } from "@/components/fields";
+import { PasswordInput } from "@/components/password-input";
 import { Notice } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Change your password" };
@@ -40,10 +41,10 @@ export default async function PlatformPasswordPage() {
             pendingLabel="Changing..."
           >
             <Field label="Current password" required>
-              <Input name="current" type="password" autoComplete="current-password" required />
+              <PasswordInput name="current" autoComplete="current-password" required />
             </Field>
             <Field label="New password" required hint="At least 8 characters. Use something long.">
-              <Input name="password" type="password" autoComplete="new-password" required />
+              <PasswordInput name="password" autoComplete="new-password" required />
             </Field>
           </ActionForm>
         </div>

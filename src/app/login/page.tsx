@@ -5,6 +5,7 @@ import { currentUser } from "@/lib/auth";
 import { loginAction } from "@/actions/auth";
 import { ActionForm } from "@/components/form";
 import { Field, Input } from "@/components/fields";
+import { PasswordInput } from "@/components/password-input";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -46,9 +47,8 @@ export default async function LoginPage({
               />
             </Field>
             <Field label="Password" required>
-              <Input
+              <PasswordInput
                 name="password"
-                type="password"
                 autoComplete="current-password"
                 required
               />

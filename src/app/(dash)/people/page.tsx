@@ -13,6 +13,7 @@ import {
 } from "@/actions/users";
 import { ActionButton, ActionForm } from "@/components/form";
 import { Field, FieldRow, Input, Select } from "@/components/fields";
+import { PasswordInput } from "@/components/password-input";
 import {
   Badge,
   Card,
@@ -276,11 +277,14 @@ export default async function PeoplePage({
                   required
                   hint="Pre-filled with a suggestion. At least 8 characters."
                 >
-                  <Input
+                  <PasswordInput
                     name="password"
                     defaultValue={startingPassword}
+                    autoComplete="new-password"
                     required
                     minLength={8}
+                    // Shown: this is the password being handed to somebody.
+                    initiallyVisible
                   />
                 </Field>
               </ActionForm>
@@ -311,7 +315,15 @@ export default async function PeoplePage({
                   </Select>
                 </Field>
                 <Field label="New password" required>
-                  <Input name="password" required minLength={8} />
+                  {/* Was a plain text input: an admin resetting somebody's
+                      password had it legible on screen to whoever was
+                      standing behind them. */}
+                  <PasswordInput
+                    name="password"
+                    autoComplete="new-password"
+                    required
+                    minLength={8}
+                  />
                 </Field>
               </ActionForm>
             </Card>

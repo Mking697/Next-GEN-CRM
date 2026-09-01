@@ -4,6 +4,7 @@ import { ROLE_LABEL, ROLE_TAGLINE } from "@/lib/permissions";
 import { changeOwnPasswordAction, logoutAction } from "@/actions/auth";
 import { ActionForm, SubmitButton } from "@/components/form";
 import { Field, Input } from "@/components/fields";
+import { PasswordInput } from "@/components/password-input";
 import {
   Badge,
   Card,
@@ -71,26 +72,23 @@ export default async function AccountPage() {
             resetOnSuccess
           >
             <Field label="Current password" required>
-              <Input
+              <PasswordInput
                 name="currentPassword"
-                type="password"
                 autoComplete="current-password"
                 required
               />
             </Field>
             <Field label="New password" required hint="At least 8 characters.">
-              <Input
+              <PasswordInput
                 name="newPassword"
-                type="password"
                 autoComplete="new-password"
                 required
                 minLength={8}
               />
             </Field>
             <Field label="New password again" required>
-              <Input
+              <PasswordInput
                 name="confirmPassword"
-                type="password"
                 autoComplete="new-password"
                 required
                 minLength={8}

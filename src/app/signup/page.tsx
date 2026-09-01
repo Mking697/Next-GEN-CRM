@@ -5,6 +5,7 @@ import { currentUser } from "@/lib/auth";
 import { signUpAction } from "@/actions/workspace";
 import { ActionForm } from "@/components/form";
 import { Field, Input } from "@/components/fields";
+import { PasswordInput } from "@/components/password-input";
 
 export const metadata: Metadata = { title: "Start a workspace" };
 
@@ -72,9 +73,8 @@ export default async function SignupPage() {
             </Field>
 
             <Field label="Password" required hint="At least 8 characters.">
-              <Input
+              <PasswordInput
                 name="password"
-                type="password"
                 autoComplete="new-password"
                 required
               />

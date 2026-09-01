@@ -4,6 +4,7 @@ import { readPlatformSession } from "@/server/platform";
 import { platformLoginAction } from "@/actions/platform";
 import { ActionForm } from "@/components/form";
 import { Field, Input } from "@/components/fields";
+import { PasswordInput } from "@/components/password-input";
 import { Notice } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -45,7 +46,7 @@ export default async function PlatformLoginPage({
               <Input name="email" type="email" autoComplete="username" autoFocus required />
             </Field>
             <Field label="Password" required>
-              <Input name="password" type="password" autoComplete="current-password" required />
+              <PasswordInput name="password" autoComplete="current-password" required />
             </Field>
           </ActionForm>
         </div>

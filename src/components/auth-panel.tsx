@@ -5,6 +5,7 @@ import { loginAction } from "@/actions/auth";
 import { signUpAction } from "@/actions/workspace";
 import { ActionForm } from "./form";
 import { Field, Input } from "./fields";
+import { PasswordInput } from "./password-input";
 import { cx } from "./ui";
 
 /**
@@ -74,9 +75,8 @@ export function AuthPanel({ initial = "login" }: { initial?: Mode }) {
               />
             </Field>
             <Field label="Password" required>
-              <Input
+              <PasswordInput
                 name="password"
-                type="password"
                 autoComplete="current-password"
                 required
               />
@@ -123,9 +123,8 @@ export function AuthPanel({ initial = "login" }: { initial?: Mode }) {
               />
             </Field>
             <Field label="Password" required hint="At least 8 characters.">
-              <Input
+              <PasswordInput
                 name="password"
-                type="password"
                 autoComplete="new-password"
                 required
               />
