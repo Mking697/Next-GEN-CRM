@@ -59,7 +59,8 @@ the owner creates admins, admins create salesmen and CREs.
 | `npm start` | `node .next/standalone/server.js`, binds to `process.env.PORT` |
 | `npm run db:deploy` | `prisma migrate deploy` against `DIRECT_DATABASE_URL` |
 | `npm run seed` | Creates the owner. Idempotent: does nothing if an owner exists |
-| `npm run typecheck` | `tsc --noEmit` |
+| `npm run typecheck` | `tsc --noEmit`, tests included |
+| `npm test` | The unit suite, on Node's built-in runner |
 
 ---
 
@@ -304,6 +305,31 @@ it cannot drift. Data visibility works the same way: `DATA_SCOPES` is turned
 into Prisma `where` clauses in `src/server/scope.ts` and printed in words on
 the guidebook, so a role can never be shown a scope the queries do not apply.
 
+### The tests
+
+`npm test`, on Node's built-in runner. No Jest, no Vitest, no config file -
+`node --test` plus the `tsx` loader that was already a dependency for the seed
+script.
+
+They cover the pure modules, which is where the invariants this app leans on
+actually live:
+
+| File | What it pins down |
+|---|---|
+| `money.test.ts` | Rupee parsing rejects a third decimal instead of rounding it; Indian 2-3-3 grouping; the BigInt boundary throws rather than losing precision |
+| `quotation-math.test.ts` | The line amount rounds exactly once; GST is charged on goods **plus** freight; the formula parser cannot express anything but arithmetic |
+| `dedupe.test.ts` | Seven spellings of one Indian mobile number collapse to one key; the junk lead sources send in the email field is rejected rather than collided |
+| `order-state.test.ts` | Payment state is a fold over the payment rows, so deleting a payment walks a PAID order back to PARTIAL on its own |
+| `permissions.test.ts` | Enforcement and the Guidebook agree for every role and every permission; no role is granted a scope the queries never apply |
+| `dates.test.ts` | A month means a month in `APP_TIMEZONE`, so an order confirmed at 3am IST on the 1st lands in the right month and the right year |
+
+Two things the suite deliberately does not do. It never opens a database
+connection: anything that would is integration territory and belongs with a
+real Postgres, not with a mock that agrees with whatever the code does today.
+And it runs with `--conditions=react-server`, because the modules under test
+import `server-only`; without it the suite would be testing a file the server
+never loads.
+
 ---
 
 ## Roles
@@ -360,4 +386,7 @@ src/
   actions/               server actions, one file per area
   app/                   routes
   components/            shared UI
+tests/
+  env-setup.mjs          a minimal valid environment, loaded before the suite
+  *.test.ts              one file per module under test
 ```
