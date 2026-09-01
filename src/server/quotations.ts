@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { env } from "@/lib/env";
 import type { Prisma } from "@/generated/prisma/client";
 import type { QuotationStatus, MirrorStatus } from "@/generated/prisma/enums";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
@@ -62,25 +63,28 @@ const VALID_FOR_DAYS = 15;
  * REF-020, continuing the series the Apps Script system left at REF-019.
  *
  * Same shape as the order-number allocator: read the highest, add one, and
- * let the unique index settle any race by making us try again.
+ * let the unique index settle any race by making us try again. It reads the
+ * highest with MAX() over the numeric part for the same reason - a TEXT sort
+ * would rank REF-999 above REF-1000 and quietly stop allocating.
+ *
+ * The starting number comes through lib/env, not from process.env directly.
+ * Reading the raw variable here meant one setting in this app skipped the
+ * validation and the defaulting every other setting goes through.
  */
 async function withQuoteNumber<T>(
   run: (quoteNo: string) => Promise<T>,
 ): Promise<T> {
-  const start = Number(process.env.QUOTATION_NUMBER_START ?? "20");
+  const start = env.QUOTATION_NUMBER_START;
 
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    const latest = await prisma.quotation.findFirst({
-      where: { quoteNo: { startsWith: "REF-" } },
-      orderBy: { quoteNo: "desc" },
-      select: { quoteNo: true },
-    });
+    const [row] = await prisma.$queryRaw<{ max: number | null }[]>`
+      SELECT MAX(CAST(SUBSTRING("quoteNo" FROM '[0-9]+$') AS INTEGER))::int AS max
+      FROM "Quotation"
+      WHERE "quoteNo" ~ '^REF-[0-9]+$'
+    `;
 
-    const lastNumber = latest ? Number(latest.quoteNo.slice(4)) : 0;
-    const next = Math.max(
-      Number.isFinite(lastNumber) ? lastNumber + 1 : 1,
-      Number.isFinite(start) ? start : 1,
-    ) + attempt;
+    const lastNumber = row?.max ?? 0;
+    const next = Math.max(lastNumber + 1, start) + attempt;
 
     try {
       return await run(`REF-${String(next).padStart(3, "0")}`);

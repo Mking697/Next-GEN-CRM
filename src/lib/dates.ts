@@ -95,6 +95,18 @@ export function currentMonthKey(zone = timeZone()): string {
   return `${year}-${month}`;
 }
 
+/**
+ * This year, in the app timezone.
+ *
+ * Order numbers are stamped with it, and an order confirmed at 3am IST on
+ * 1 January belongs to the new year. `getUTCFullYear()` would file it under
+ * the old one for the first five and a half hours of every year, which is
+ * exactly the bug the rest of this module exists to avoid.
+ */
+export function currentYear(zone = timeZone()): number {
+  return Number(currentMonthKey(zone).slice(0, 4));
+}
+
 const MONTH_NAMES = [
   "January",
   "February",

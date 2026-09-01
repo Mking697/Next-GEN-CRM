@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/permissions";
 import type { SessionUser } from "@/lib/session";
 import { cleanText, normalizeEmail, normalizePhone } from "@/lib/dedupe";
 import { formatPaise, toBigIntPaise, toPaise } from "@/lib/money";
+import { currentYear } from "@/lib/dates";
 import { audit } from "./audit";
 import { canClose, orderMoney, type OrderMoney } from "./order-state";
 import { leadWritableWhere, ordersWhere } from "./scope";
@@ -164,8 +165,20 @@ export async function confirmOrder(
 }
 
 /**
- * ORD-2026-0007. Derived from a count, so it races; the unique index on
- * orderNo catches the collision and we simply try the next number.
+ * ORD-2026-0007. Derived from the highest number issued so far, so it races;
+ * the unique index on orderNo catches the collision and we simply try the
+ * next number.
+ *
+ * The year comes from the app timezone, not from UTC. An order confirmed at
+ * 3am IST on 1 January belongs to the new year, and getUTCFullYear() filed it
+ * under the old one for the first five and a half hours of every year.
+ *
+ * The highest number is read with MAX() over the numeric part rather than by
+ * sorting the string column. `ORDER BY "orderNo" DESC` is a TEXT sort, and a
+ * text sort puts ORD-2026-9999 above ORD-2026-10000 because '9' > '1'. The
+ * retry loop would paper over that for six attempts and then start refusing
+ * to allocate at all. Comparing integers is correct at any magnitude, so the
+ * padding below is only ever cosmetic.
  *
  * Exported because placing an order from a quotation needs the same allocator,
  * and two allocators would eventually hand out the same number.
@@ -173,17 +186,19 @@ export async function confirmOrder(
 export async function withOrderNumber<T>(
   run: (orderNo: string) => Promise<T>,
 ): Promise<T> {
-  const year = new Date().getUTCFullYear();
-  const prefix = `ORD-${year}-`;
+  const prefix = `ORD-${currentYear()}-`;
 
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    const latest = await prisma.order.findFirst({
-      where: { orderNo: { startsWith: prefix } },
-      orderBy: { orderNo: "desc" },
-      select: { orderNo: true },
-    });
-    const lastNumber = latest ? Number(latest.orderNo.slice(prefix.length)) : 0;
-    const next = (Number.isFinite(lastNumber) ? lastNumber : 0) + 1 + attempt;
+    // The regex guard keeps a hand-edited or legacy value out of the CAST,
+    // which would otherwise fail the whole statement rather than be ignored.
+    const [row] = await prisma.$queryRaw<{ max: number | null }[]>`
+      SELECT MAX(CAST(SUBSTRING("orderNo" FROM '[0-9]+$') AS INTEGER))::int AS max
+      FROM "Order"
+      WHERE "orderNo" LIKE ${`${prefix}%`}
+        AND "orderNo" ~ '^ORD-[0-9]{4}-[0-9]+$'
+    `;
+    const lastNumber = row?.max ?? 0;
+    const next = lastNumber + 1 + attempt;
     const orderNo = `${prefix}${String(next).padStart(4, "0")}`;
 
     try {
