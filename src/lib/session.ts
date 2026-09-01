@@ -19,6 +19,33 @@ import type { Role } from "@/generated/prisma/enums";
 
 const TOKEN_BYTES = 32;
 
+/**
+ * True once a workspace's subscription date has passed. Null means it was
+ * never put on a timer - the seed script and a platform administrator
+ * provisioning a workspace by hand both leave it that way.
+ */
+export function isSubscriptionExpired(org: {
+  subscriptionUntil: Date | null;
+}): boolean {
+  return org.subscriptionUntil !== null && org.subscriptionUntil.getTime() <= Date.now();
+}
+
+/**
+ * Whether anybody in this workspace may do anything at all.
+ *
+ * Two independent switches, checked together everywhere either one used to be
+ * checked alone: `isActive` is the platform administrator's manual suspend,
+ * `subscriptionUntil` is the automatic one a lapsed subscription trips by
+ * itself. Both lock the whole workspace the same way - an unpaid subscription
+ * has to stop everyone in it, not just whoever forgot to renew.
+ */
+export function isWorkspaceUsable(org: {
+  isActive: boolean;
+  subscriptionUntil: Date | null;
+}): boolean {
+  return org.isActive && !isSubscriptionExpired(org);
+}
+
 export interface SessionUser {
   id: string;
   /**
@@ -147,7 +174,15 @@ export async function readSession(): Promise<SessionUser | null> {
           name: true,
           role: true,
           isActive: true,
-          org: { select: { id: true, name: true, slug: true, isActive: true } },
+          org: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              isActive: true,
+              subscriptionUntil: true,
+            },
+          },
           salesmen: {
             orderBy: { salesman: { name: "asc" } },
             select: { salesman: { select: { id: true, name: true } } },
@@ -167,9 +202,10 @@ export async function readSession(): Promise<SessionUser | null> {
   // A deactivated account keeps its rows but cannot act.
   if (!session.user.isActive) return null;
 
-  // Nor can anybody in a suspended organisation - an unpaid subscription must
-  // stop the whole workspace, not just the person who forgot to pay.
-  if (!session.user.org.isActive) return null;
+  // Nor can anybody in a suspended or subscription-expired organisation - an
+  // unpaid subscription must stop the whole workspace, not just the person
+  // who forgot to pay.
+  if (!isWorkspaceUsable(session.user.org)) return null;
 
   const salesmen = session.user.salesmen.map((link) => link.salesman);
 

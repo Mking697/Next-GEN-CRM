@@ -153,6 +153,15 @@ model Organisation {
   quotationTerms   String?
 
   isActive  Boolean  @default(true)
+
+  /// When this workspace's paid access runs out. Null means it never does -
+  /// the seed script and a platform administrator creating a workspace by
+  /// hand both leave it unset. A self-service signup gets a 14-day trial
+  /// here, and a platform administrator extends it manually once the
+  /// customer pays; enforcement treats an expired date exactly like
+  /// isActive=false; both are checked wherever the other is.
+  subscriptionUntil DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

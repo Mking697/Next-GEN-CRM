@@ -74,6 +74,10 @@ export interface SignupResult {
   userId: string;
 }
 
+/** Every self-service signup starts with this much runway before a platform
+ * administrator has to extend it by hand. */
+const TRIAL_DAYS = 14;
+
 export async function signUp(input: SignupInput): Promise<SignupResult> {
   const fieldErrors: Record<string, string> = {};
 
@@ -133,6 +137,7 @@ export async function signUp(input: SignupInput): Promise<SignupResult> {
           quotationSubject: FALLBACK_SUBJECT,
           quotationNote: FALLBACK_NOTE,
           quotationTerms: FALLBACK_TERMS,
+          subscriptionUntil: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
         },
         select: { id: true, slug: true },
       });

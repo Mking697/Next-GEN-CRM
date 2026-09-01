@@ -6,6 +6,7 @@ import { env } from "@/lib/env";
 import { ConflictError, UnauthenticatedError, ValidationError } from "@/lib/errors";
 import { hashPassword, validatePassword, verifyPassword } from "@/lib/password";
 import { normalizeEmail } from "@/lib/dedupe";
+import { isSubscriptionExpired } from "@/lib/session";
 import { audit } from "./audit";
 
 /**
@@ -205,6 +206,8 @@ export interface WorkspaceRow {
   slug: string;
   name: string;
   isActive: boolean;
+  subscriptionUntil: Date | null;
+  subscriptionExpired: boolean;
   createdAt: Date;
   users: number;
   leads: number;
@@ -228,6 +231,7 @@ export async function listAllWorkspaces(): Promise<WorkspaceRow[]> {
       slug: true,
       name: true,
       isActive: true,
+      subscriptionUntil: true,
       createdAt: true,
       _count: { select: { users: true, leads: true, orders: true, quotations: true } },
       users: {
@@ -244,6 +248,8 @@ export async function listAllWorkspaces(): Promise<WorkspaceRow[]> {
     slug: org.slug,
     name: org.name,
     isActive: org.isActive,
+    subscriptionUntil: org.subscriptionUntil,
+    subscriptionExpired: isSubscriptionExpired(org),
     createdAt: org.createdAt,
     users: org._count.users,
     leads: org._count.leads,
@@ -282,6 +288,47 @@ export async function setWorkspaceActive(
   });
 }
 
+/**
+ * Set, extend or clear a workspace's subscription date.
+ *
+ * `until: null` means never expires - a platform administrator moving a
+ * customer onto a plan with no fixed term. A date in the past locks the
+ * workspace immediately, the same as suspending it, so every open session
+ * there is torn down rather than left to notice on its next request.
+ */
+export async function setSubscriptionUntil(
+  admin: PlatformSessionAdmin,
+  orgId: string,
+  until: Date | null,
+): Promise<void> {
+  const org = await prisma.organisation.findUniqueOrThrow({
+    where: { id: orgId },
+    select: { name: true },
+  });
+
+  const expiredNow = until !== null && until.getTime() <= Date.now();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.organisation.update({
+      where: { id: orgId },
+      data: { subscriptionUntil: until },
+    });
+    if (expiredNow) {
+      await tx.session.deleteMany({ where: { user: { orgId } } });
+    }
+    await audit(tx, {
+      orgId,
+      action: "workspace.subscription.set",
+      actorId: null,
+      targetType: "Organisation",
+      targetId: orgId,
+      detail: until
+        ? `Platform administrator ${admin.name} set the ${org.name} workspace's subscription to run until ${until.toISOString()}`
+        : `Platform administrator ${admin.name} removed the ${org.name} workspace's subscription expiry`,
+    });
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Impersonation
 // ---------------------------------------------------------------------------
@@ -304,11 +351,16 @@ export async function impersonate(
 ): Promise<{ token: string; orgName: string; as: string }> {
   const org = await prisma.organisation.findUniqueOrThrow({
     where: { id: orgId },
-    select: { id: true, name: true, isActive: true },
+    select: { id: true, name: true, isActive: true, subscriptionUntil: true },
   });
   if (!org.isActive) {
     throw new ConflictError(
       "That workspace is suspended. Reactivate it before opening it.",
+    );
+  }
+  if (isSubscriptionExpired(org)) {
+    throw new ConflictError(
+      "That workspace's subscription has expired. Extend it before opening it.",
     );
   }
 

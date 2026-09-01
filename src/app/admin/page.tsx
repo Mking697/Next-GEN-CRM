@@ -4,10 +4,11 @@ import { listAllWorkspaces, readPlatformSession } from "@/server/platform";
 import {
   impersonateAction,
   platformLogoutAction,
+  setSubscriptionUntilAction,
   setWorkspaceActiveAction,
 } from "@/actions/platform";
-import { ActionButton } from "@/components/form";
-import { formatDate } from "@/lib/dates";
+import { ActionButton, ActionForm } from "@/components/form";
+import { formatDate, toDateInputValue } from "@/lib/dates";
 import {
   Badge,
   Card,
@@ -98,6 +99,7 @@ export default async function PlatformConsolePage() {
                 <Th className="text-right">Quotes</Th>
                 <Th className="text-right">Orders</Th>
                 <Th>Signed up</Th>
+                <Th>Subscription</Th>
                 <Th>{""}</Th>
               </tr>
             </thead>
@@ -124,6 +126,44 @@ export default async function PlatformConsolePage() {
                   <Td className="tnum text-right">{w.orders}</Td>
                   <Td className="text-sm text-[var(--text-muted)]">
                     {formatDate(w.createdAt)}
+                  </Td>
+                  <Td className="min-w-[11rem]">
+                    <div className="mb-1.5 text-sm">
+                      {w.subscriptionUntil ? (
+                        <span
+                          className={
+                            w.subscriptionExpired ? "text-[var(--danger)]" : ""
+                          }
+                        >
+                          {formatDate(w.subscriptionUntil)}
+                        </span>
+                      ) : (
+                        <span className="text-[var(--text-faint)]">No expiry</span>
+                      )}
+                      {w.subscriptionExpired ? (
+                        <Badge tone="danger" className="ml-2">
+                          expired
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <ActionForm
+                      action={setSubscriptionUntilAction}
+                      hidden={{ orgId: w.id }}
+                      submitLabel="Set"
+                      submitVariant="secondary"
+                      className="space-y-1.5"
+                    >
+                      <input
+                        type="date"
+                        name="until"
+                        defaultValue={
+                          w.subscriptionUntil
+                            ? toDateInputValue(w.subscriptionUntil)
+                            : ""
+                        }
+                        className="rounded-lg border bg-[var(--bg-raised)] px-2 py-1 text-sm"
+                      />
+                    </ActionForm>
                   </Td>
                   <Td>
                     <div className="flex justify-end gap-2">

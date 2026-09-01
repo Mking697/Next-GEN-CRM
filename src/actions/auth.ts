@@ -5,7 +5,12 @@ import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
 import { actionGuard, fail, ok, type ActionResult } from "@/lib/errors";
 import { hashPassword, needsRehash, verifyPassword } from "@/lib/password";
-import { createSession, destroySession, requestIp } from "@/lib/session";
+import {
+  createSession,
+  destroySession,
+  isSubscriptionExpired,
+  requestIp,
+} from "@/lib/session";
 import { normalizeEmail } from "@/lib/dedupe";
 import { hit, reset } from "@/lib/rate-limit";
 
@@ -55,7 +60,14 @@ export async function loginAction(
         id: true,
         passwordHash: true,
         isActive: true,
-        org: { select: { slug: true, name: true, isActive: true } },
+        org: {
+          select: {
+            slug: true,
+            name: true,
+            isActive: true,
+            subscriptionUntil: true,
+          },
+        },
       },
     });
 
@@ -100,6 +112,12 @@ export async function loginAction(
     if (!user.org.isActive) {
       return fail(
         `The ${user.org.name} workspace is not active. Contact whoever owns it.`,
+        "AUTH",
+      );
+    }
+    if (isSubscriptionExpired(user.org)) {
+      return fail(
+        `The ${user.org.name} workspace's subscription has expired. Contact whoever owns it to renew.`,
         "AUTH",
       );
     }

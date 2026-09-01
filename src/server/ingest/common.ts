@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import type { LeadSource } from "@/generated/prisma/enums";
 import { cleanText, normalizeEmail, normalizePhone } from "@/lib/dedupe";
 import { env } from "@/lib/env";
+import { isWorkspaceUsable } from "@/lib/session";
 
 /**
  * The single door every automatically-ingested lead comes through.
@@ -247,8 +248,8 @@ export async function integrationOrgId(): Promise<string | null> {
 
   const org = await prisma.organisation.findUnique({
     where: { slug },
-    select: { id: true, isActive: true },
+    select: { id: true, isActive: true, subscriptionUntil: true },
   });
-  if (!org || !org.isActive) return null;
+  if (!org || !isWorkspaceUsable(org)) return null;
   return org.id;
 }

@@ -6,12 +6,14 @@ import { actionGuard, fail, ok, type ActionResult } from "@/lib/errors";
 import { hit, reset } from "@/lib/rate-limit";
 import { env } from "@/lib/env";
 import { requestIp } from "@/lib/session";
+import { fromDateInputValue } from "@/lib/dates";
 import {
   changePlatformPassword,
   impersonate,
   platformLogin,
   platformLogout,
   requirePlatformAdmin,
+  setSubscriptionUntil,
   setWorkspaceActive,
 } from "@/server/platform";
 
@@ -88,6 +90,37 @@ export async function setWorkspaceActiveAction(
     return ok(
       undefined,
       isActive ? "Workspace reactivated." : "Workspace suspended and everybody signed out.",
+    );
+  });
+}
+
+export async function setSubscriptionUntilAction(
+  _previous: unknown,
+  formData: FormData,
+): Promise<ActionResult<undefined>> {
+  return actionGuard(async () => {
+    const admin = await requirePlatformAdmin();
+    if (admin.mustChangePassword) {
+      return fail("Change your password first.", "VALIDATION");
+    }
+
+    const orgId = text(formData, "orgId");
+    const raw = text(formData, "until");
+
+    let until: Date | null = null;
+    if (raw) {
+      until = fromDateInputValue(raw);
+      if (!until) return fail("That is not a valid date.", "VALIDATION");
+    }
+
+    await setSubscriptionUntil(admin, orgId, until);
+
+    revalidatePath("/admin");
+    return ok(
+      undefined,
+      until
+        ? `Subscription set to run until ${raw}.`
+        : "Subscription expiry removed - this workspace never expires.",
     );
   });
 }
