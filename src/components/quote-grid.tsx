@@ -59,6 +59,8 @@ export interface QuoteGridProps {
   readOnly?: boolean;
   name?: string;
   suggestions?: GridSuggestions;
+  /** Organisation.defaultUom - what a brand-new row's UOM cell opens with. */
+  defaultUom?: string;
 }
 
 export function QuoteGrid({
@@ -68,9 +70,10 @@ export function QuoteGrid({
   readOnly = false,
   name = "grid",
   suggestions = {},
+  defaultUom = "",
 }: QuoteGridProps) {
   const [rows, setRows] = useState<GridRow[]>(() =>
-    initialRows.length > 0 ? initialRows : [emptyRow(newKey())],
+    initialRows.length > 0 ? initialRows : [emptyRow(newKey(), defaultUom)],
   );
   const [freight, setFreight] = useState(initialFreight);
   const [gstPercent, setGstPercent] = useState(String(initialGstPercent));
@@ -141,18 +144,21 @@ export function QuoteGrid({
     setRows((current) => {
       const next = [...current];
       const at = afterIndex === undefined ? next.length : afterIndex + 1;
-      next.splice(at, 0, emptyRow(newKey()));
+      next.splice(at, 0, emptyRow(newKey(), defaultUom));
       return next;
     });
-  }, []);
+  }, [defaultUom]);
 
-  const removeRow = useCallback((rowIndex: number) => {
-    setRows((current) =>
-      current.length === 1
-        ? [emptyRow(newKey())]
-        : current.filter((_, index) => index !== rowIndex),
-    );
-  }, []);
+  const removeRow = useCallback(
+    (rowIndex: number) => {
+      setRows((current) =>
+        current.length === 1
+          ? [emptyRow(newKey(), defaultUom)]
+          : current.filter((_, index) => index !== rowIndex),
+      );
+    },
+    [defaultUom],
+  );
 
   // -- keyboard ------------------------------------------------------------
 
@@ -224,7 +230,7 @@ export function QuoteGrid({
       const next = [...current];
       block.forEach((cells, r) => {
         const target = rowIndex + r;
-        while (next.length <= target) next.push(emptyRow(newKey()));
+        while (next.length <= target) next.push(emptyRow(newKey(), defaultUom));
         const row = { ...next[target]! };
         cells.forEach((value, c) => {
           const column = col + c;

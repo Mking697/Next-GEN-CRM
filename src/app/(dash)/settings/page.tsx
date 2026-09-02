@@ -281,6 +281,27 @@ export default async function SettingsPage({
           pendingLabel="Saving..."
         >
           <Field
+            label="Default unit of measure"
+            hint={
+              <>
+                What your business quotes by - SQM for panels, LTR for
+                liquids, KG, NOS, whatever fits. Every new quotation line
+                opens with this (a CRE can still type any unit on any line),
+                and it is the unit the Overview page's monthly quantity tile
+                adds up. Leave blank to turn that tile off - not every
+                business has one dominant unit worth totalling.
+              </>
+            }
+          >
+            <Input
+              name="defaultUom"
+              defaultValue={org.defaultUom ?? ""}
+              maxLength={20}
+              placeholder="SQM"
+              className="max-w-40 uppercase"
+            />
+          </Field>
+          <Field
             label="Subject"
             hint="The line under the customer's address, saying what the quotation is for."
           >

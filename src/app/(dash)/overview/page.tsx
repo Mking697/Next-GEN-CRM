@@ -113,34 +113,40 @@ export default async function OverviewPage({
       </section>
 
       {/*
-        The plant schedules against square metres, so the month has to be
-        answerable in panel as well as in rupees. Only area-quoted lines count:
-        a door quoted in NOS is not an area, and folding the two together would
-        be a number nobody could act on.
+        Only shown once an organisation has set Organisation.defaultUom (the
+        unit its business actually quotes by - Settings > Quotation defaults).
+        A panel manufacturer schedules its plant against square metres, a
+        liquids business against litres; a company with no one dominant unit
+        gets nothing here rather than a number in a unit nobody chose. Only
+        lines quoted in that exact unit count - a door quoted in NOS is not an
+        area, and folding the two together would be a number nobody could act
+        on.
       */}
-      <section className="mb-6" aria-labelledby="area">
-        <h2
-          id="area"
-          className="mb-2.5 text-xs font-medium tracking-wide text-[var(--text-faint)] uppercase"
-        >
-          Panel in {month.shortLabel}
-        </h2>
-        <div className="grid grid-cols-2 gap-3">
-          <StatTile
-            label="Quoted"
-            value={formatArea(data.area.quotedMilli)}
-            sub="SQM"
-            hint={`Across quotations raised in ${month.shortLabel}`}
-          />
-          <StatTile
-            label="Confirmed"
-            value={formatArea(data.area.confirmedMilli)}
-            sub="SQM"
-            tone={data.area.confirmedMilli > 0 ? "ok" : "neutral"}
-            hint={`Turned into an order in ${month.shortLabel}`}
-          />
-        </div>
-      </section>
+      {data.area.uom ? (
+        <section className="mb-6" aria-labelledby="area">
+          <h2
+            id="area"
+            className="mb-2.5 text-xs font-medium tracking-wide text-[var(--text-faint)] uppercase"
+          >
+            Quantity in {month.shortLabel}
+          </h2>
+          <div className="grid grid-cols-2 gap-3">
+            <StatTile
+              label="Quoted"
+              value={formatArea(data.area.quotedMilli)}
+              sub={data.area.uom}
+              hint={`Across quotations raised in ${month.shortLabel}`}
+            />
+            <StatTile
+              label="Confirmed"
+              value={formatArea(data.area.confirmedMilli)}
+              sub={data.area.uom}
+              tone={data.area.confirmedMilli > 0 ? "ok" : "neutral"}
+              hint={`Turned into an order in ${month.shortLabel}`}
+            />
+          </div>
+        </section>
+      ) : null}
 
       {user.role === "CRE" && data.self ? (
         <Card>
@@ -208,8 +214,9 @@ export default async function OverviewPage({
 }
 
 /**
- * Thousandths of a square metre as a plain figure. The unit is the tile's
- * `sub`, so the number stays the number and SQM sits beside it.
+ * Thousandths of the organisation's own unit as a plain figure. The unit
+ * itself is the tile's `sub`, so the number stays the number and SQM/LTR/
+ * whatever the organisation quotes by sits beside it.
  */
 function formatArea(milli: number): string {
   return (milli / 1000).toLocaleString("en-IN", {

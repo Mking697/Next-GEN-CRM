@@ -160,6 +160,16 @@ model Organisation {
   quotationNote    String?
   quotationTerms   String?
 
+  /// What this organisation quotes by, e.g. "SQM" for a panel manufacturer or
+  /// "LTR" for a company selling liquids. Two things read it: it is the unit
+  /// every new quotation line starts with (server/quotations.ts still lets a
+  /// CRE type any unit on any line - this only sets what a blank row opens
+  /// with), and it is which QuotationItem.uom the Overview page's quantity
+  /// tile sums for the month. Null turns that tile off entirely rather than
+  /// showing a number in a unit nobody asked for - a business selling several
+  /// unrelated things in different units has no one figure worth adding up.
+  defaultUom String?
+
   isActive  Boolean  @default(true)
 
   /// When this workspace's paid access runs out. Null means it never does -

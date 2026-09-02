@@ -21,6 +21,22 @@ function optional(formData: FormData, key: string): string | null {
   return value.length > 0 ? value : null;
 }
 
+/**
+ * The value for `key`, or `undefined` when this particular <form> never
+ * included it at all.
+ *
+ * The Settings page posts the letterhead, the bank details and the quotation
+ * defaults as three separate <form>s, all to this one action, and
+ * updateOrganisation()'s whole contract rests on telling "sent as blank"
+ * apart from "not part of this submission" - the first clears a field, the
+ * second must leave it alone. `formData.get()` returns null for both an
+ * absent key and one that was submitted empty, so `text()`/`optional()`
+ * alone cannot make that distinction; `formData.has()` can.
+ */
+function fieldIfPresent(formData: FormData, key: string): string | null | undefined {
+  return formData.has(key) ? optional(formData, key) : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Signing a company up
 // ---------------------------------------------------------------------------
@@ -63,22 +79,23 @@ export async function updateWorkspaceAction(
     const user = await requireUserOrThrow();
 
     await updateOrganisation(user, {
-      name: text(formData, "name"),
-      legalName: optional(formData, "legalName"),
-      address: optional(formData, "address"),
-      gstin: optional(formData, "gstin"),
-      phone: optional(formData, "phone"),
-      email: optional(formData, "email"),
-      website: optional(formData, "website"),
-      bankBeneficiary: optional(formData, "bankBeneficiary"),
-      bankName: optional(formData, "bankName"),
-      bankAccount: optional(formData, "bankAccount"),
-      bankIfsc: optional(formData, "bankIfsc"),
-      bankAccountType: optional(formData, "bankAccountType"),
-      bankBranch: optional(formData, "bankBranch"),
-      quotationSubject: optional(formData, "quotationSubject"),
-      quotationNote: optional(formData, "quotationNote"),
-      quotationTerms: optional(formData, "quotationTerms"),
+      name: fieldIfPresent(formData, "name"),
+      legalName: fieldIfPresent(formData, "legalName"),
+      address: fieldIfPresent(formData, "address"),
+      gstin: fieldIfPresent(formData, "gstin"),
+      phone: fieldIfPresent(formData, "phone"),
+      email: fieldIfPresent(formData, "email"),
+      website: fieldIfPresent(formData, "website"),
+      bankBeneficiary: fieldIfPresent(formData, "bankBeneficiary"),
+      bankName: fieldIfPresent(formData, "bankName"),
+      bankAccount: fieldIfPresent(formData, "bankAccount"),
+      bankIfsc: fieldIfPresent(formData, "bankIfsc"),
+      bankAccountType: fieldIfPresent(formData, "bankAccountType"),
+      bankBranch: fieldIfPresent(formData, "bankBranch"),
+      quotationSubject: fieldIfPresent(formData, "quotationSubject"),
+      quotationNote: fieldIfPresent(formData, "quotationNote"),
+      quotationTerms: fieldIfPresent(formData, "quotationTerms"),
+      defaultUom: fieldIfPresent(formData, "defaultUom"),
     });
 
     refresh();

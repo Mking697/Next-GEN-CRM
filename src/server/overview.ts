@@ -42,9 +42,14 @@ export interface OverviewCounts {
 }
 
 export interface OverviewArea {
-  /** Thousandths of a square metre quoted in the month. */
+  /** The organisation's own Organisation.defaultUom, e.g. "SQM" or "LTR".
+   *  Null means this organisation has not set one, and the page hides the
+   *  section entirely rather than adding up quantities in a unit nobody
+   *  chose. */
+  uom: string | null;
+  /** Thousandths of `uom` quoted in the month. */
   quotedMilli: number;
-  /** Thousandths confirmed into an order in the month. */
+  /** Thousandths of `uom` confirmed into an order in the month. */
   confirmedMilli: number;
 }
 
@@ -115,12 +120,21 @@ export async function getOverview(
 
   const scopedQuotations = quotationsWhere(user);
 
+  // Read before the Promise.all below: areaTotals() only has a query worth
+  // running once it knows which uom this organisation actually quotes by.
+  const org = await prisma.organisation.findUniqueOrThrow({
+    where: { id: user.orgId },
+    select: { defaultUom: true },
+  });
+
   const [counts, money, area, salesmen, self] = await Promise.all([
     showLeadCounts
       ? leadCounts(user, window)
       : Promise.resolve({ waiting: 0, working: 0, confirmed: 0, lost: 0, total: 0 }),
     moneyTotals(scopedOrders, window),
-    areaTotals(scopedQuotations, window),
+    org.defaultUom
+      ? areaTotals(scopedQuotations, window, org.defaultUom)
+      : Promise.resolve({ uom: null, quotedMilli: 0, confirmedMilli: 0 }),
     salesmanRows(user, window),
     user.role === "CRE" ? creSelf(user, window) : Promise.resolve(null),
   ]);
@@ -217,20 +231,24 @@ async function leadCounts(
 // ---------------------------------------------------------------------------
 
 /**
- * How much panel, not just how much money.
+ * How much of the organisation's own unit, not just how much money.
  *
  * Every other figure on this page is rupees or a count, which is what made it
- * read like any other dashboard: the plant schedules against square metres,
- * and the app could not answer that question at all. Only area units are
- * summed - a line quoted in NOS is a door, not an area, and adding the two
- * would be a number that means nothing.
+ * read like any other dashboard: a panel manufacturer schedules its plant
+ * against square metres, a business selling liquids against litres, and the
+ * app could not answer either question at all. Only lines quoted in this
+ * organisation's own Organisation.defaultUom are summed - a line quoted in
+ * NOS is a door, not an area, and adding the two would be a number that means
+ * nothing. Never called with an empty uom; the caller in getOverview() skips
+ * this entirely when the organisation has not set one.
  */
 async function areaTotals(
   scopedQuotations: Prisma.QuotationWhereInput,
   window: Window,
+  uom: string,
 ): Promise<OverviewArea> {
   const area: Prisma.QuotationItemWhereInput = {
-    uom: { equals: "SQM", mode: "insensitive" },
+    uom: { equals: uom, mode: "insensitive" },
   };
 
   const [quoted, confirmed] = await Promise.all([
@@ -252,6 +270,7 @@ async function areaTotals(
   ]);
 
   return {
+    uom,
     quotedMilli: quoted._sum.qtyMilli ?? 0,
     confirmedMilli: confirmed._sum.qtyMilli ?? 0,
   };

@@ -232,10 +232,11 @@ describe("looksLikeFormula", () => {
 });
 
 describe("grid rows", () => {
-  test("a row with nothing typed into it is empty, even though UOM defaults", () => {
-    // emptyRow() seeds uom to SQM. That default must not make the row look
-    // filled in, or every untouched row would be saved.
-    assert.equal(isRowEmpty(emptyRow("k1")), true);
+  test("a row with nothing typed into it is empty, even with an organisation's default UOM seeded in", () => {
+    // emptyRow()'s second argument seeds uom from Organisation.defaultUom.
+    // That default must not make the row look filled in, or every untouched
+    // row would be saved.
+    assert.equal(isRowEmpty(emptyRow("k1", "SQM")), true);
   });
 
   test("a row with only a quantity is not empty", () => {

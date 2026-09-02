@@ -38,6 +38,7 @@ export interface OrganisationSettings {
   quotationSubject: string | null;
   quotationNote: string | null;
   quotationTerms: string | null;
+  defaultUom: string | null;
 }
 
 export async function getOrganisation(
@@ -68,6 +69,7 @@ export async function getOrganisation(
       quotationSubject: true,
       quotationNote: true,
       quotationTerms: true,
+      defaultUom: true,
     },
   });
 
@@ -101,6 +103,7 @@ export interface OrganisationInput {
   quotationSubject?: string | null;
   quotationNote?: string | null;
   quotationTerms?: string | null;
+  defaultUom?: string | null;
 }
 
 export async function updateOrganisation(
@@ -180,6 +183,10 @@ export async function updateOrganisation(
   set("quotationSubject", input.quotationSubject, longText(input.quotationSubject, 500));
   set("quotationNote", input.quotationNote, longText(input.quotationNote, 2000));
   set("quotationTerms", input.quotationTerms, longText(input.quotationTerms, 8000));
+  // Short and typed by hand (SQM, LTR, KG, ...), so cleanText's normal
+  // whitespace handling is right - not longText's, which is for the terms
+  // block's line breaks.
+  set("defaultUom", input.defaultUom, cleanText(input.defaultUom, 20)?.toUpperCase() ?? null);
 
   await prisma.$transaction(async (tx) => {
     await tx.organisation.update({ where: { id: user.orgId }, data });

@@ -6,6 +6,7 @@ import { can } from "@/lib/permissions";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import { formatPaise } from "@/lib/money";
 import { getLetterhead } from "@/server/letterhead";
+import { getOrganisation } from "@/server/organisation";
 import { formatQtyMilli, type GridRow } from "@/lib/quotation-math";
 import { getQuotation, listItemSuggestions } from "@/server/quotations";
 import { listCresFor } from "@/server/orders";
@@ -42,6 +43,7 @@ export default async function QuotationPage({
 
   const quotation = await getQuotation(user, id);
   const { company, bank, logo, isBlank } = await getLetterhead(user.orgId);
+  const { defaultUom } = await getOrganisation(user);
   if (!quotation) notFound();
 
   const [revisions, suggestions] = await Promise.all([
@@ -365,6 +367,7 @@ export default async function QuotationPage({
             initialGstPercent={quotation.totals.gstPercent}
             suggestions={suggestions}
             readOnly={!editable}
+            defaultUom={defaultUom ?? ""}
           />
         </Card>
 

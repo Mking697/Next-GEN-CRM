@@ -194,7 +194,7 @@ export const GRID_COLUMNS = [
     multiline: true,
     placeholder: "Anything the customer needs spelled out",
   },
-  { key: "uom", label: "UOM", width: "5rem", placeholder: "SQM" },
+  { key: "uom", label: "UOM", width: "5rem", placeholder: "Unit" },
 ] as const;
 
 export type GridTextColumn = (typeof GRID_COLUMNS)[number]["key"];
@@ -260,7 +260,14 @@ export interface GridRow {
   rate: string;
 }
 
-export function emptyRow(key: string): GridRow {
+/**
+ * `defaultUom` is the organisation's own `Organisation.defaultUom` (e.g.
+ * "SQM" for a panel manufacturer, "LTR" for a company selling liquids) - a
+ * blank grid should not open every new line already saying "SQM" for a
+ * business that has never sold a square metre of anything. Empty when the
+ * organisation has not set one, which just means the cell opens blank.
+ */
+export function emptyRow(key: string, defaultUom = ""): GridRow {
   return {
     key,
     particular: "",
@@ -268,7 +275,7 @@ export function emptyRow(key: string): GridRow {
     specs: "",
     sheetThickness: "",
     description: "",
-    uom: "SQM",
+    uom: defaultUom,
     qty: "",
     qtyFormula: "",
     rate: "",
