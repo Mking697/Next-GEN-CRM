@@ -49,7 +49,7 @@ export default async function SignupPage() {
                 required
                 autoFocus
                 maxLength={120}
-                placeholder="Hicon Panels Pvt Ltd"
+                placeholder="Acme Manufacturing Pvt Ltd"
               />
             </Field>
 
@@ -57,7 +57,7 @@ export default async function SignupPage() {
               label="Workspace address"
               hint="Lowercase letters, digits and hyphens. Leave blank to use your company name."
             >
-              <Input name="slug" maxLength={40} placeholder="hicon-panels" />
+              <Input name="slug" maxLength={40} placeholder="acme-manufacturing" />
             </Field>
 
             <Field label="Your name" required>

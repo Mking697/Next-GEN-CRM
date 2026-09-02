@@ -107,7 +107,7 @@ export function AuthPanel({ initial = "login" }: { initial?: Mode }) {
                 name="companyName"
                 required
                 maxLength={120}
-                placeholder="Hicon Panels Pvt Ltd"
+                placeholder="Acme Manufacturing Pvt Ltd"
               />
             </Field>
             <Field label="Your name" required>
@@ -140,7 +140,7 @@ export function AuthPanel({ initial = "login" }: { initial?: Mode }) {
                   label="Workspace address"
                   hint="Lowercase letters, digits and hyphens."
                 >
-                  <Input name="slug" maxLength={40} placeholder="hicon-panels" />
+                  <Input name="slug" maxLength={40} placeholder="acme-manufacturing" />
                 </Field>
               </div>
             </details>

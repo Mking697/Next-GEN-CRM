@@ -112,7 +112,7 @@ export default async function SettingsPage({
                 name="legalName"
                 defaultValue={org.legalName ?? ""}
                 maxLength={160}
-                placeholder="Hicon Panels Private Limited"
+                placeholder="Acme Manufacturing Private Limited"
               />
             </Field>
             <Field label="Address">
