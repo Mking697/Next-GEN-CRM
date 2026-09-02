@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { requirePageAccess } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { formatDate } from "@/lib/dates";
+import { formatPaise } from "@/lib/money";
 import { getOrganisation } from "@/server/organisation";
+import { getBillingStatus } from "@/server/billing";
 import {
   removeLogoAction,
   updateWorkspaceAction,
@@ -9,7 +12,17 @@ import {
 } from "@/actions/workspace";
 import { ActionButton, ActionForm } from "@/components/form";
 import { Field, FieldRow, Input, Textarea } from "@/components/fields";
-import { Card, CardHeader, Notice, PageHeader } from "@/components/ui";
+import { RenewButton } from "@/components/billing/renew-button";
+import {
+  Badge,
+  Card,
+  CardHeader,
+  Notice,
+  PageHeader,
+  Table,
+  Td,
+  Th,
+} from "@/components/ui";
 
 export const metadata: Metadata = { title: "Your company" };
 
@@ -31,6 +44,8 @@ export default async function SettingsPage({
   const org = await getOrganisation(user);
   const { welcome } = await searchParams;
   const editable = can(user.role, "workspace.edit");
+  const showBilling = can(user.role, "workspace.billing");
+  const billing = showBilling ? await getBillingStatus(user) : null;
 
   const missing = [
     !org.address && "address",
@@ -298,6 +313,105 @@ export default async function SettingsPage({
           </Field>
         </ActionForm>
       </Card>
+
+      {/* -- billing --------------------------------------------------- */}
+      {billing ? (
+        <Card className="mt-4">
+          <CardHeader
+            title="Billing"
+            hint="One flat plan, no tiers. Renewing before the current date runs out stacks the extra 30 days on top instead of resetting the clock."
+          />
+
+          {billing.enabled ? (
+            <>
+              <div className="mb-4 flex flex-wrap items-center gap-x-8 gap-y-3 text-base">
+                <div>
+                  <div className="text-xs text-[var(--text-faint)]">Subscription</div>
+                  <div
+                    className={
+                      billing.expired
+                        ? "font-medium text-[var(--danger)]"
+                        : "font-medium"
+                    }
+                  >
+                    {billing.subscriptionUntil
+                      ? formatDate(billing.subscriptionUntil)
+                      : "No expiry set"}
+                    {billing.expired ? (
+                      <Badge tone="danger" className="ml-2">
+                        expired
+                      </Badge>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              <RenewButton />
+
+              {billing.recentPayments.length > 0 ? (
+                <div className="mt-6">
+                  <div className="mb-2 text-xs font-medium text-[var(--text-faint)]">
+                    Recent payments
+                  </div>
+                  <Table minWidth="32rem">
+                    <thead>
+                      <tr>
+                        <Th>Date</Th>
+                        <Th>Amount</Th>
+                        <Th>Status</Th>
+                        <Th>New expiry</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {billing.recentPayments.map((payment) => (
+                        <tr key={payment.id}>
+                          <Td className="text-sm text-[var(--text-muted)]">
+                            {formatDate(payment.createdAt)}
+                          </Td>
+                          <Td numeric>
+                            {payment.amountPaise !== null
+                              ? formatPaise(payment.amountPaise)
+                              : "-"}
+                          </Td>
+                          <Td>
+                            <Badge
+                              tone={
+                                payment.status === "CAPTURED"
+                                  ? "ok"
+                                  : payment.status === "FAILED"
+                                    ? "danger"
+                                    : "neutral"
+                              }
+                            >
+                              {payment.status.toLowerCase()}
+                            </Badge>
+                          </Td>
+                          <Td className="text-sm text-[var(--text-muted)]">
+                            {payment.subscriptionUntilAfter
+                              ? formatDate(payment.subscriptionUntilAfter)
+                              : "-"}
+                          </Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <Notice tone="neutral" title="Billing is not configured yet">
+              Renewing here will be available once a platform administrator
+              adds Dodo Payments keys. Until then, ask them to extend your
+              subscription from the platform console.
+              <br />
+              <span className="mt-2 block text-xs text-[var(--text-faint)]">
+                Webhook URL for the Dodo Payments dashboard:{" "}
+                <code className="font-mono">{billing.webhookUrl}</code>
+              </span>
+            </Notice>
+          )}
+        </Card>
+      ) : null}
     </>
   );
 }

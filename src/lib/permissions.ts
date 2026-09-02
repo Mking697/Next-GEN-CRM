@@ -419,6 +419,13 @@ export const PERMISSIONS = {
       "What a customer reads at the top of a quotation, and the account they pay into. Changing it changes every quotation printed afterwards, but not the ones already sent - those carry their own snapshot of the customer, and the letterhead is read fresh each time it is rendered.",
     roles: MANAGEMENT,
   },
+  "workspace.billing": {
+    group: "workspace",
+    title: "Renew the subscription",
+    detail:
+      "Pay through Dodo Payments for another 30 days. A renewal made before the current subscription runs out stacks on top of it rather than resetting the clock. Only appears once a platform administrator has configured real Dodo Payments keys - until then, extending the subscription is done by them from the platform console, exactly as before.",
+    roles: ["OWNER"],
+  },
 
   // -- integrations --------------------------------------------------------
   "integration.view": {

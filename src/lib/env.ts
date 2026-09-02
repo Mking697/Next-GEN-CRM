@@ -82,6 +82,18 @@ const schema = z.object({
   META_GRAPH_VERSION: z.string().default("v21.0"),
   META_GRAPH_URL: z.string().url().default("https://graph.facebook.com"),
   META_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+
+  DODO_PAYMENTS_API_KEY: z.string().default(""),
+  DODO_PAYMENTS_WEBHOOK_SECRET: z.string().default(""),
+  /**
+   * The subscription product created once in the Dodo Payments dashboard.
+   * There are no plan tiers - every workspace renews against this one
+   * product, and Dodo Payments prices it, not this app: nothing here stores a
+   * rupee amount to bill, so it cannot drift from what the dashboard actually
+   * charges.
+   */
+  DODO_PAYMENTS_PRODUCT_ID: z.string().default(""),
+  DODO_PAYMENTS_MODE: z.enum(["test", "live"]).default("test"),
 }).superRefine((value, ctx) => {
   // The session cookie takes its Secure flag from APP_URL, because that is
   // the only thing that knows whether the public origin is TLS - the app
@@ -192,3 +204,25 @@ export const isMetaEnabled = () => env.META_APP_SECRET.length > 0;
 export const isCronEnabled = () => env.CRON_SECRET.length > 0;
 
 export const metaWebhookUrl = () => `${env.APP_URL}/api/webhooks/meta`;
+
+/**
+ * Subscription billing is off unless every Dodo Payments credential is
+ * configured - the same "empty means off" convention as isIndiamartEnabled()
+ * and isMetaEnabled(). While this is false, the Renew flow does not appear
+ * anywhere in the app and the webhook route refuses every request; the
+ * platform administrator's manual override at /admin keeps working exactly
+ * as before.
+ */
+export const isBillingEnabled = () =>
+  env.DODO_PAYMENTS_API_KEY.length > 0 &&
+  env.DODO_PAYMENTS_WEBHOOK_SECRET.length > 0 &&
+  env.DODO_PAYMENTS_PRODUCT_ID.length > 0;
+
+/** https://test.dodopayments.com in test mode, https://live.dodopayments.com once switched over. */
+export const dodoPaymentsApiBase = () =>
+  env.DODO_PAYMENTS_MODE === "live"
+    ? "https://live.dodopayments.com"
+    : "https://test.dodopayments.com";
+
+export const dodoPaymentsWebhookUrl = () =>
+  `${env.APP_URL}/api/webhooks/dodo-payments`;

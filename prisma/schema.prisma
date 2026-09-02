@@ -80,6 +80,14 @@ enum ActivityKind {
   CLOSED
 }
 
+/// What became of a Dodo Payments checkout session created for a subscription
+/// renewal.
+enum SubscriptionPaymentStatus {
+  CREATED
+  CAPTURED
+  FAILED
+}
+
 // ---------------------------------------------------------------------------
 // Tenants
 // ---------------------------------------------------------------------------
@@ -178,6 +186,7 @@ model Organisation {
   creLinks   CreSalesman[]
   syncStates SyncState[]
   auditEvents AuditEvent[]
+  subscriptionPayments SubscriptionPayment[]
 
   @@index([isActive])
 }
@@ -884,4 +893,55 @@ model AuditEvent {
   @@index([orgId])
   @@index([createdAt])
   @@index([targetType, targetId])
+}
+
+// ---------------------------------------------------------------------------
+// Billing
+// ---------------------------------------------------------------------------
+
+/// One Dodo Payments checkout session created for a subscription renewal, and
+/// what became of it. Alongside AuditEvent - which records that a renewal
+/// happened, in a sentence, next to every suspension and impersonation - this
+/// is the structured, queryable paper trail: the exact amount, the Dodo
+/// Payments identifiers, and the subscription date the payment actually
+/// bought.
+///
+/// Created the moment "Renew" is pressed, with status CREATED and no amount
+/// yet - Dodo Payments prices the product on its own side, not this app, so
+/// the amount is only known once the webhook reports what was actually
+/// charged. This is also the row the webhook looks a payment up BY (its own
+/// id, carried in the checkout session's metadata) - never by anything the
+/// client or the webhook body claims on its own - to find out which
+/// organisation it belongs to.
+model SubscriptionPayment {
+  id String @id @default(cuid())
+
+  orgId String
+  org   Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Dodo Payments checkout session id, for looking a renewal up in their
+  /// dashboard. Not the correlation key - this row's own `id`, round-tripped
+  /// through the session's metadata, is - but worth keeping for support.
+  checkoutSessionId String?
+
+  /// Dodo Payments payment id, set once payment.succeeded is confirmed.
+  /// Unique so a redelivered webhook for the same payment is recorded once.
+  dodoPaymentId String? @unique
+
+  /// INR in integer paise, matching the rest of the app's money convention.
+  /// Null until the webhook reports what was actually charged.
+  amountPaise BigInt?
+
+  status SubscriptionPaymentStatus @default(CREATED)
+
+  /// Organisation.subscriptionUntil immediately after this payment was
+  /// applied. Null until it has been, which is what lets the trail say what a
+  /// renewal actually bought rather than just that money moved.
+  subscriptionUntilAfter DateTime?
+
+  createdAt  DateTime  @default(now())
+  capturedAt DateTime?
+
+  @@index([orgId])
+  @@index([checkoutSessionId])
 }
