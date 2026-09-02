@@ -94,6 +94,18 @@ const TONE_CLASS: Record<Tone, string> = {
   danger: "bg-[var(--danger-soft)] text-[var(--danger)] border-transparent",
 };
 
+// The dot repeats the tone in a second, non-textual way, so a column of
+// badges reads by colour before anybody parses the word - the same reason a
+// status column exists at all. Neutral gets none: it is the absence of a
+// state, and a grey dot in a grey chip would be noise, not signal.
+const DOT_CLASS: Record<Tone, string | null> = {
+  neutral: null,
+  accent: "bg-[var(--accent-text)]",
+  ok: "bg-[var(--ok)]",
+  warn: "bg-[var(--warn)]",
+  danger: "bg-[var(--danger)]",
+};
+
 export function Badge({
   children,
   tone = "neutral",
@@ -103,14 +115,18 @@ export function Badge({
   tone?: Tone;
   className?: string;
 }) {
+  const dot = DOT_CLASS[tone];
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium whitespace-nowrap",
+        "inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-xs font-medium whitespace-nowrap",
         TONE_CLASS[tone],
         className,
       )}
     >
+      {dot ? (
+        <span aria-hidden className={cx("h-1.5 w-1.5 shrink-0 rounded-full", dot)} />
+      ) : null}
       {children}
     </span>
   );
@@ -149,8 +165,26 @@ export function StatTile({
             ? "text-[var(--accent-text)]"
             : "";
 
+  // A hairline top edge in the tone's own colour, so a row of tiles reads at
+  // a glance before the eye gets to the number - the thing a "waiting" or
+  // "due" figure most wants. Neutral tiles get none: most of the row is
+  // neutral, and a bar on every tile would just be a border.
+  const edge =
+    tone === "ok"
+      ? "bg-[var(--ok)]"
+      : tone === "warn"
+        ? "bg-[var(--warn)]"
+        : tone === "danger"
+          ? "bg-[var(--danger)]"
+          : tone === "accent"
+            ? "bg-[var(--accent)]"
+            : null;
+
   return (
-    <div className="rounded-xl border bg-[var(--bg-raised)] p-3 shadow-[var(--shadow-sm)]">
+    <div className="relative overflow-hidden rounded-xl border bg-[var(--bg-raised)] p-3 shadow-[var(--shadow-sm)]">
+      {edge ? (
+        <span aria-hidden className={cx("absolute inset-x-0 top-0 h-0.5", edge)} />
+      ) : null}
       <div className="text-xs font-medium tracking-wide text-[var(--text-faint)] uppercase">
         {label}
       </div>
@@ -184,6 +218,23 @@ export function EmptyState({
 }) {
   return (
     <div className="rounded-xl border border-dashed bg-[var(--bg-sunken)] px-6 py-12 text-center">
+      <span
+        aria-hidden
+        className="mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-full border border-dashed text-[var(--text-faint)]"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 7h16M4 12h16M4 17h10" />
+        </svg>
+      </span>
       <p className="text-md font-medium">{title}</p>
       {body ? (
         <p className="mx-auto mt-1.5 max-w-md text-base text-[var(--text-muted)]">
@@ -213,12 +264,22 @@ export function Notice({
           ? "border-[var(--ok)]"
           : "border-[var(--border-strong)]";
 
+  // A faint tint of the tone's own colour rather than the flat neutral
+  // sunken tone every notice used regardless of severity - a danger notice
+  // sitting in the same grey box as an ok one made severity depend entirely
+  // on reading the left edge.
+  const tint =
+    tone === "danger"
+      ? "bg-[var(--danger-soft)]"
+      : tone === "warn"
+        ? "bg-[var(--warn-soft)]"
+        : tone === "ok"
+          ? "bg-[var(--ok-soft)]"
+          : "bg-[var(--bg-sunken)]";
+
   return (
     <div
-      className={cx(
-        "rounded-lg border-l-2 bg-[var(--bg-sunken)] px-3.5 py-2.5 text-base",
-        border,
-      )}
+      className={cx("rounded-lg border-l-2 px-3.5 py-2.5 text-base", border, tint)}
       role={tone === "danger" ? "alert" : undefined}
     >
       {title ? <p className="font-medium">{title}</p> : null}
@@ -247,10 +308,14 @@ export function Notice({
 export function Table({
   children,
   sticky = false,
+  zebra = false,
   minWidth = "42rem",
 }: {
   children: ReactNode;
   sticky?: boolean;
+  /** Alternate row tint, for a list long enough that a row needs help being
+   *  read across from its first cell to its last without losing the line. */
+  zebra?: boolean;
   minWidth?: string;
 }) {
   return (
@@ -264,6 +329,7 @@ export function Table({
         className={cx(
           "crm-table w-full border-collapse text-sm",
           sticky && "crm-table--sticky",
+          zebra && "crm-table--zebra",
         )}
         style={{ minWidth }}
       >
@@ -332,18 +398,23 @@ export function Td({
 
 // cursor-pointer is here rather than on each caller: a <button> does not get
 // one from the browser, and every button in the app comes through this string.
+//
+// active:scale-[0.97] is the one bit of motion every button gets: 100ms, no
+// easing tricks, so a click reads as a press rather than a state just
+// changing on its own. Disabled below opts back out, since a disabled button
+// cannot be pressed.
 const BUTTON_BASE =
-  "inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-base font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-55";
+  "inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-base font-medium transition-[background-color,border-color,box-shadow,transform] duration-150 ease-out active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55 disabled:active:scale-100";
 
 export const buttonStyles = {
   base: BUTTON_BASE,
   primary: cx(
     BUTTON_BASE,
-    "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]",
+    "bg-[var(--accent)] text-white shadow-[var(--shadow-sm)] hover:bg-[var(--accent-hover)] hover:shadow-[var(--shadow)]",
   ),
   secondary: cx(
     BUTTON_BASE,
-    "border bg-[var(--bg-raised)] hover:bg-[var(--bg-hover)]",
+    "border bg-[var(--bg-raised)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-hover)]",
   ),
   ghost: cx(BUTTON_BASE, "text-[var(--text-muted)] hover:bg-[var(--bg-hover)]"),
   danger: cx(
@@ -405,7 +476,10 @@ export function Meter({ percent, tone = "accent" }: { percent: number; tone?: To
       role="img"
       aria-label={`${width}% received`}
     >
-      <div className={cx("h-full rounded-full", fill)} style={{ width: `${width}%` }} />
+      <div
+        className={cx("h-full rounded-full transition-[width] duration-300 ease-out", fill)}
+        style={{ width: `${width}%` }}
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { setActingSalesmanAction } from "@/actions/users";
 import { Brand } from "./brand";
+import { Select } from "./fields";
 import { cx } from "./ui";
 
 export interface NavItem {
@@ -58,7 +59,7 @@ export function Nav({
           type="button"
           aria-label="Close menu"
           onClick={() => setOpen(false)}
-          className="fixed inset-0 z-20 bg-black/30 lg:hidden"
+          className="fade-in fixed inset-0 z-20 bg-black/30 lg:hidden"
         />
       ) : null}
 
@@ -119,19 +120,19 @@ export function Nav({
                 changes what every list below is scoped to, so it has to be a
                 round trip to the server, not client state. */}
             <form action={setActingSalesmanAction}>
-              <select
+              <Select
                 id="acting-salesman"
                 name="salesmanId"
                 defaultValue={acting.activeId ?? ""}
                 onChange={(event) => event.currentTarget.form?.requestSubmit()}
-                className="mt-1 w-full rounded-lg border bg-[var(--bg-raised)] px-2 py-1.5 text-base"
+                className="mt-1 py-1.5"
               >
                 {acting.options.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </form>
           </div>
         ) : null}

@@ -6,8 +6,17 @@ import { cx } from "./ui";
  * inside the client form wrapper alike.
  */
 
+// The focus ring used to be border-colour-only, which on a form with a dozen
+// fields meant scanning for a slightly different grey to find the caret. The
+// added glow is the same accent-soft tint the quote grid's cells use for
+// exactly the same reason, so a focused field looks like the same idea
+// wherever it shows up.
+// The ring stacks with the browser's own :focus-visible outline from
+// globals.css rather than replacing it - keyboard focus keeps its 2px
+// outline, and this adds the same accent-soft glow the quote grid's cells
+// use, so a focused field reads as the same idea everywhere it shows up.
 const CONTROL =
-  "w-full rounded-lg border bg-[var(--bg-raised)] px-3 py-2 text-base text-[var(--text)] placeholder:text-[var(--text-faint)] transition-colors focus:border-[var(--accent)] disabled:opacity-60";
+  "w-full rounded-lg border bg-[var(--bg-raised)] px-3 py-2 text-base text-[var(--text)] placeholder:text-[var(--text-faint)] transition-[border-color,box-shadow] duration-150 ease-out hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-60 disabled:hover:border-[var(--border)]";
 
 export function Field({
   label,
@@ -65,7 +74,14 @@ export function Textarea(
 
 export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select {...props} className={cx(CONTROL, "appearance-none pr-8", props.className)}>
+    <select
+      {...props}
+      // appearance-none drops the browser's own arrow along with the rest of
+      // its native chrome; select-arrow (globals.css) draws a themed one back
+      // in the pr-8 gap so a <select> still reads as "opens a list" rather
+      // than as a text input.
+      className={cx(CONTROL, "select-arrow appearance-none pr-8", props.className)}
+    >
       {props.children}
     </select>
   );

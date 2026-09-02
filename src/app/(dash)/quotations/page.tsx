@@ -115,7 +115,7 @@ export default async function QuotationsPage({
         />
       ) : (
         <Card>
-          <Table sticky>
+          <Table sticky zebra>
             <thead>
               <tr>
                 <Th>Reference</Th>

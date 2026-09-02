@@ -39,7 +39,7 @@ export function PasswordInput({
         type={visible ? "text" : "password"}
         aria-describedby={describedBy}
         className={cx(
-          "w-full rounded-lg border bg-[var(--bg-raised)] py-2 pl-3 text-base text-[var(--text)] placeholder:text-[var(--text-faint)] transition-colors focus:border-[var(--accent)] disabled:opacity-60",
+          "w-full rounded-lg border bg-[var(--bg-raised)] py-2 pl-3 text-base text-[var(--text)] placeholder:text-[var(--text-faint)] transition-[border-color,box-shadow] duration-150 ease-out hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-60",
           // Room for the button, so a long password never runs underneath it.
           "pr-11",
           className,

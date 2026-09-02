@@ -141,7 +141,7 @@ export default async function OrdersPage({
         />
       ) : (
         <Card>
-          <Table sticky>
+          <Table sticky zebra>
             <thead>
               <tr>
                 <Th>Order</Th>

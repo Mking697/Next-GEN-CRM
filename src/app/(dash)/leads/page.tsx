@@ -103,7 +103,7 @@ export default async function LeadsPage({
         />
       ) : (
         <Card>
-          <Table sticky>
+          <Table sticky zebra>
             <thead>
               <tr>
                 <Th>Lead</Th>

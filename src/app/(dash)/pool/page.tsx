@@ -108,7 +108,7 @@ export default async function PoolPage({
         />
       ) : (
         <Card>
-          <Table sticky>
+          <Table sticky zebra>
             <thead>
               <tr>
                 <Th>Lead</Th>
