@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { setActingSalesmanAction } from "@/actions/users";
+import { Brand } from "./brand";
 import { cx } from "./ui";
 
 export interface NavItem {
@@ -68,11 +69,8 @@ export function Nav({
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex items-center gap-2.5 border-b px-4 py-4">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--accent)] text-base font-semibold text-white">
-            C
-          </div>
-          <span className="text-md font-semibold tracking-tight">Sales CRM</span>
+        <div className="border-b px-4 py-4">
+          <Brand size="sm" />
         </div>
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">

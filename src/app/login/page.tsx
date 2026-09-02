@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { loginAction } from "@/actions/auth";
 import { ActionForm } from "@/components/form";
+import { Brandmark } from "@/components/brand";
 import { Field, Input } from "@/components/fields";
 import { PasswordInput } from "@/components/password-input";
 
@@ -24,10 +25,8 @@ export default async function LoginPage({
     <main className="flex min-h-dvh items-center justify-center px-5 py-12">
       <div className="w-full max-w-sm rise">
         <div className="mb-7">
-          <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent)] text-md font-semibold text-white">
-            C
-          </div>
-          <h1 className="text-lg font-semibold tracking-tight">Sales CRM</h1>
+          <Brandmark className="mb-3" />
+          <h1 className="text-lg font-semibold tracking-tight">Next Gen CRM</h1>
           <p className="mt-1 text-base text-[var(--text-muted)]">
             Sign in with the email address and password your admin gave you.
           </p>

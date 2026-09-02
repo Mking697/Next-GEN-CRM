@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { AuthPanel } from "@/components/auth-panel";
+import { Brand } from "@/components/brand";
 
 export const metadata: Metadata = {
-  title: "Sales CRM",
+  title: "Next Gen CRM",
   description:
     "Enquiries from IndiaMART, Meta and walk-ins become quotations, orders and collected payments - without anybody retyping a number.",
   // The one page in the application that is meant to be found.
@@ -44,12 +45,7 @@ export default async function LandingPage() {
 
         <div className="relative mx-auto w-full max-w-xl stagger">
           <div style={{ "--i": 0 } as React.CSSProperties}>
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-md font-semibold text-white">
-                C
-              </div>
-              <span className="text-md font-semibold tracking-tight">Sales CRM</span>
-            </div>
+            <Brand />
           </div>
 
           <h1

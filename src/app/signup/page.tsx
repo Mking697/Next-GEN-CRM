@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { signUpAction } from "@/actions/workspace";
 import { ActionForm } from "@/components/form";
+import { Brandmark, Wordmark } from "@/components/brand";
 import { Field, Input } from "@/components/fields";
 import { PasswordInput } from "@/components/password-input";
 
@@ -24,8 +25,9 @@ export default async function SignupPage() {
     <main className="flex min-h-dvh items-center justify-center px-5 py-12">
       <div className="w-full max-w-md rise">
         <div className="mb-7">
-          <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent)] text-md font-semibold text-white">
-            C
+          <div className="mb-3 flex items-center gap-2.5">
+            <Brandmark />
+            <Wordmark className="text-md" />
           </div>
           <h1 className="text-lg font-semibold tracking-tight">
             Start your workspace

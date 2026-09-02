@@ -3,8 +3,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Sales CRM",
-    template: "%s - Sales CRM",
+    default: "Next Gen CRM",
+    template: "%s - Next Gen CRM",
   },
   description:
     "Lead pool, orders and collections for a sales team working IndiaMART, Meta and walk-in enquiries.",
