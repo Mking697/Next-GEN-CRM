@@ -536,7 +536,7 @@ function History({
         hint={
           reworks === 0
             ? "Every save is recorded here, with exactly what moved since the one before."
-            : `Reworked ${reworks} time${reworks === 1 ? "" : ""}. Each entry lists what changed against the save before it.`
+            : `Reworked ${reworks} time${reworks === 1 ? "" : "s"}. Each entry lists what changed against the save before it.`
         }
       />
 

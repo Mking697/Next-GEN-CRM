@@ -7,8 +7,10 @@ import { formatCompactPaise, formatRupees } from "@/lib/money";
 import { listOrders } from "@/server/orders";
 import { ORDER_STAGE_LABEL } from "@/server/order-state";
 import { PaymentBadge, StageBadge } from "@/components/badges";
+import { Input, Select } from "@/components/fields";
 import { Pagination } from "@/components/pagination";
 import {
+  buttonStyles,
   Card,
   EmptyState,
   LinkButton,
@@ -91,37 +93,31 @@ export default async function OrdersPage({
 
       <Card className="mb-4" padded={false}>
         <form className="flex flex-wrap items-center gap-2 p-3" action="/orders">
-          <input
+          <Input
             name="q"
             defaultValue={params.q ?? ""}
             placeholder="Search order number, company or contact"
-            className="min-w-56 flex-1 rounded-lg border bg-[var(--bg-raised)] px-3 py-1.5 text-base"
+            className="min-w-56 flex-1 py-1.5"
           />
-          <select
-            name="stage"
-            defaultValue={stage ?? ""}
-            className="rounded-lg border bg-[var(--bg-raised)] px-3 py-1.5 text-base"
-          >
+          <Select name="stage" defaultValue={stage ?? ""} className="w-auto py-1.5">
             <option value="">Every stage</option>
             {STAGES.map((value) => (
               <option key={value} value={value}>
                 {ORDER_STAGE_LABEL[value]}
               </option>
             ))}
-          </select>
+          </Select>
           <label className="flex items-center gap-1.5 text-base text-[var(--text-muted)]">
             <input
               type="checkbox"
               name="due"
               value="1"
               defaultChecked={params.due === "1"}
+              className="accent-[var(--accent)]"
             />
             Only with money due
           </label>
-          <button
-            type="submit"
-            className="rounded-lg border bg-[var(--bg-raised)] px-3 py-1.5 text-base hover:bg-[var(--bg-hover)]"
-          >
+          <button type="submit" className={buttonStyles.secondary}>
             Filter
           </button>
         </form>

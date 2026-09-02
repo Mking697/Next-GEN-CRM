@@ -140,7 +140,7 @@ export default async function PeoplePage({
                                     defaultChecked={person.salesmen.some(
                                       (entry) => entry.id === salesman.id,
                                     )}
-                                    className="h-3.5 w-3.5"
+                                    className="h-3.5 w-3.5 accent-[var(--accent)]"
                                   />
                                   {salesman.name}
                                 </label>

@@ -8,10 +8,11 @@ import { listPool, listSalesmenForAssign } from "@/server/leads";
 import { LEAD_SOURCE_LABEL } from "@/server/order-state";
 import { grabLeadAction, assignLeadAction } from "@/actions/leads";
 import { ActionButton, ActionForm } from "@/components/form";
-import { Select } from "@/components/fields";
+import { Input, Select } from "@/components/fields";
 import { Pagination } from "@/components/pagination";
 import {
   Badge,
+  buttonStyles,
   Card,
   EmptyState,
   LinkButton,
@@ -69,26 +70,23 @@ export default async function PoolPage({
 
       <Card className="mb-4" padded={false}>
         <form className="flex flex-wrap items-center gap-2 p-3" action="/pool">
-          <input
+          <Input
             name="q"
             defaultValue={params.q ?? ""}
             placeholder="Search name, company, city, product, phone"
-            className="min-w-56 flex-1 rounded-lg border bg-[var(--bg-raised)] px-3 py-1.5 text-base"
+            className="min-w-56 flex-1 py-1.5"
           />
-          <select
+          <Select
             name="source"
             defaultValue={source ?? ""}
-            className="rounded-lg border bg-[var(--bg-raised)] px-3 py-1.5 text-base"
+            className="w-auto py-1.5"
           >
             <option value="">Every source</option>
             <option value="INDIAMART">IndiaMART</option>
             <option value="META">Meta</option>
             <option value="MANUAL">Manual</option>
-          </select>
-          <button
-            type="submit"
-            className="rounded-lg border bg-[var(--bg-raised)] px-3 py-1.5 text-base hover:bg-[var(--bg-hover)]"
-          >
+          </Select>
+          <button type="submit" className={buttonStyles.secondary}>
             Filter
           </button>
         </form>

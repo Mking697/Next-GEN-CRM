@@ -6,8 +6,10 @@ import { formatDate, relativeTime } from "@/lib/dates";
 import { formatRupees } from "@/lib/money";
 import { listQuotations } from "@/server/quotations";
 import { QuotationBadge } from "@/components/badges";
+import { Input, Select } from "@/components/fields";
 import { Pagination } from "@/components/pagination";
 import {
+  buttonStyles,
   Card,
   EmptyState,
   LinkButton,
@@ -71,28 +73,21 @@ export default async function QuotationsPage({
 
       <Card className="mb-4" padded={false}>
         <form className="flex flex-wrap items-center gap-2 p-3" action="/quotations">
-          <input
+          <Input
             name="q"
             defaultValue={params.q ?? ""}
             placeholder="Search reference number, party or contact"
-            className="min-w-56 flex-1 rounded-lg border bg-[var(--bg-raised)] px-3 py-1.5 text-base"
+            className="min-w-56 flex-1 py-1.5"
           />
-          <select
-            name="status"
-            defaultValue={status ?? ""}
-            className="rounded-lg border bg-[var(--bg-raised)] px-3 py-1.5 text-base"
-          >
+          <Select name="status" defaultValue={status ?? ""} className="w-auto py-1.5">
             <option value="">Every status</option>
             {STATUSES.map((value) => (
               <option key={value} value={value}>
                 {value.charAt(0) + value.slice(1).toLowerCase()}
               </option>
             ))}
-          </select>
-          <button
-            type="submit"
-            className="rounded-lg border bg-[var(--bg-raised)] px-3 py-1.5 text-base hover:bg-[var(--bg-hover)]"
-          >
+          </Select>
+          <button type="submit" className={buttonStyles.secondary}>
             Filter
           </button>
         </form>

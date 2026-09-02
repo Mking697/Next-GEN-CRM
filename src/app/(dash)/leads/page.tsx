@@ -6,9 +6,11 @@ import { formatDate, relativeTime } from "@/lib/dates";
 import { formatPhone } from "@/lib/dedupe";
 import { listLeads } from "@/server/leads";
 import { LEAD_STATUS_LABEL } from "@/server/order-state";
+import { Input, Select } from "@/components/fields";
 import { Pagination } from "@/components/pagination";
 import { SourceBadge, StatusBadge } from "@/components/badges";
 import {
+  buttonStyles,
   Card,
   EmptyState,
   LinkButton,
@@ -59,28 +61,21 @@ export default async function LeadsPage({
 
       <Card className="mb-4" padded={false}>
         <form className="flex flex-wrap items-center gap-2 p-3" action="/leads">
-          <input
+          <Input
             name="q"
             defaultValue={params.q ?? ""}
             placeholder="Search name, company, city, product, phone"
-            className="min-w-56 flex-1 rounded-lg border bg-[var(--bg-raised)] px-3 py-1.5 text-base"
+            className="min-w-56 flex-1 py-1.5"
           />
-          <select
-            name="status"
-            defaultValue={status ?? ""}
-            className="rounded-lg border bg-[var(--bg-raised)] px-3 py-1.5 text-base"
-          >
+          <Select name="status" defaultValue={status ?? ""} className="w-auto py-1.5">
             <option value="">Every status</option>
             {STATUSES.map((value) => (
               <option key={value} value={value}>
                 {LEAD_STATUS_LABEL[value]}
               </option>
             ))}
-          </select>
-          <button
-            type="submit"
-            className="rounded-lg border bg-[var(--bg-raised)] px-3 py-1.5 text-base hover:bg-[var(--bg-hover)]"
-          >
+          </Select>
+          <button type="submit" className={buttonStyles.secondary}>
             Filter
           </button>
         </form>

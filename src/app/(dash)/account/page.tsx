@@ -37,9 +37,7 @@ export default async function AccountPage() {
               <Badge tone="accent">{ROLE_LABEL[user.role]}</Badge>
             </DefinitionRow>
             {user.salesmen.length > 0 ? (
-              <DefinitionRow
-                label={user.salesmen.length === 1 ? "Works for" : "Works for"}
-              >
+              <DefinitionRow label="Works for">
                 {user.salesmen.map((salesman) => salesman.name).join(", ")}
               </DefinitionRow>
             ) : null}
