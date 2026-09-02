@@ -1,0 +1,119 @@
+name: CI
+
+# Pass/fail gate for every pull request and every push to main.
+#
+# Two independent jobs:
+#   - test:             npm ci, prisma generate, typecheck, then the unit
+#                        suite. No database is available, so the four
+#                        tests/integration/*.test.ts files skip themselves
+#                        cleanly (see tests/helpers/db.ts) - this job never
+#                        touches Postgres.
+#   - integration-test: the same suite again, but with a throwaway Postgres
+#                        service container and TEST_DATABASE_URL set, so the
+#                        integration suite actually runs. Migrations are
+#                        applied to that disposable container only - never to
+#                        the real Neon database. Nothing in this workflow ever
+#                        runs `prisma migrate deploy` against a real database;
+#                        that stays a deliberate, manual action.
+#
+# Both jobs must appear as required status checks in the GitHub branch
+# protection settings for main before they actually block a merge - see the
+# repo Settings > Branches after this workflow is pushed.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# A minimal, valid environment for the unit suite - mirrors the placeholders
+# tests/env-setup.mjs would otherwise fill in on its own. Setting them here
+# too covers `npx prisma generate`, which parses the datasource block's
+# env("DATABASE_URL") / env("DIRECT_DATABASE_URL") references.
+env:
+  NODE_ENV: test
+  APP_URL: http://localhost:3000
+  APP_TIMEZONE: Asia/Kolkata
+  DATABASE_URL: postgresql://test:test@localhost:5432/test
+  DIRECT_DATABASE_URL: postgresql://test:test@localhost:5432/test
+  AUTH_SECRET: test-secret-that-is-at-least-32-characters-long
+
+jobs:
+  test:
+    name: Typecheck & unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Required before typecheck/build - src/generated/prisma is gitignored.
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # No TEST_DATABASE_URL here on purpose: tests/integration/*.test.ts skip
+      # themselves via Node's { skip } test option instead of failing.
+      - name: Unit tests
+        run: npm test
+
+  integration-test:
+    name: Integration tests (real Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: crm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d crm_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # Overrides the job-level placeholders above: same shape, pointed at
+      # the disposable service container instead of nothing. This container
+      # is destroyed with the runner, so migrating it here is expected and
+      # safe - it is not the Neon database.
+      DATABASE_URL: postgresql://test:test@localhost:5432/crm_test
+      DIRECT_DATABASE_URL: postgresql://test:test@localhost:5432/crm_test
+      TEST_DATABASE_URL: postgresql://test:test@localhost:5432/crm_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # Schema for the throwaway container only - see tests/helpers/db.ts
+      # assertSchema(), which is what the integration suite depends on.
+      - name: Apply migrations to the throwaway database
+        run: npx prisma migrate deploy
+
+      # TEST_DATABASE_URL is set, so env-setup.mjs points DATABASE_URL /
+      # DIRECT_DATABASE_URL at it and tests/integration/*.test.ts run for
+      # real instead of skipping.
+      - name: Unit + integration tests
+        run: npm test
