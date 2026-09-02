@@ -111,7 +111,7 @@ export function AuthPanel({ initial = "login" }: { initial?: Mode }) {
               />
             </Field>
             <Field label="Your name" required>
-              <Input name="ownerName" required maxLength={120} placeholder="Manish Tiwari" />
+              <Input name="ownerName" required maxLength={120} placeholder="Ravi Kumar" />
             </Field>
             <Field label="Email" required>
               <Input
